@@ -26,37 +26,6 @@ st.markdown("""
         display: none;
     }
     
-    /* Header Container */
-    .header-banner {
-        background-color: #0f172a;
-        color: white;
-        padding: 16px 24px;
-        border-radius: 16px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
-    
-    /* Custom Styling cho File Uploader trong Header */
-    div[data-testid="stFileUploader"] {
-        margin-bottom: 0px;
-    }
-    div[data-testid="stFileUploader"] section {
-        padding: 4px 12px !important;
-        background-color: #10b981 !important;
-        border: none !important;
-        border-radius: 10px !important;
-        color: white !important;
-        min-height: auto !important;
-    }
-    div[data-testid="stFileUploader"] section * {
-        color: white !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-    }
-    div[data-testid="stFileUploader"] section small {
-        display: none !important;
-    }
-    
     /* Top Stat Card Styling */
     .stat-card {
         background-color: #ffffff;
@@ -121,6 +90,31 @@ st.markdown("""
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         overflow: hidden;
+    }
+
+    /* Styling đồng bộ cho File Uploader trong Header */
+    div[data-testid="stFileUploader"] {
+        margin-bottom: 0px !important;
+    }
+    div[data-testid="stFileUploader"] section {
+        padding: 6px 12px !important;
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 8px !important;
+        color: #f8fafc !important;
+        min-height: auto !important;
+    }
+    div[data-testid="stFileUploader"] section:hover {
+        border-color: #3b82f6 !important;
+        background-color: #334155 !important;
+    }
+    div[data-testid="stFileUploader"] section * {
+        color: #f8fafc !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+    }
+    div[data-testid="stFileUploader"] section small {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -188,12 +182,19 @@ if 'pop_df' not in st.session_state:
 if 'kpi_df' not in st.session_state:
     st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
 
-# --- 1. HEADER BANNER VÀ CÁC NÚT ĐIỀU KHIỂN NẰM PHẢI ---
-header_col1, header_col2 = st.columns([3, 2], vertical_alignment="center")
+# --- 1. HEADER BANNER TỔNG HỢP THỐNG NHẤT KHỐI NỀN ---
+header_container = st.container()
 
-with header_col1:
+with header_container:
+    # Container đồng nhất màu nền tối (#0f172a)
     st.markdown("""
-    <div style="background-color: #0f172a; padding: 16px 20px; border-top-left-radius: 16px; border-bottom-left-radius: 16px;">
+    <div style="background-color: #0f172a; padding: 16px 24px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-bottom: 20px;">
+    """, unsafe_allow_html=True)
+    
+    col_title, col_actions = st.columns([2.5, 1.5], vertical_alignment="center")
+    
+    with col_title:
+        st.markdown("""
         <div style="display: flex; align-items: center; gap: 12px;">
             <div style="background: rgba(37, 99, 235, 0.2); padding: 10px; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
                 <i class="fa-solid fa-chart-line" style="font-size: 20px; color: #60a5fa;"></i>
@@ -206,37 +207,28 @@ with header_col1:
                 <p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 12px;">Sheet dữ liệu: <b style="color: #fbbf24;">BC</b> | Cập nhật tự động theo file Excel</p>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-with header_col2:
-    st.markdown("""
-    <div style="background-color: #0f172a; padding: 12px 20px; border-top-right-radius: 16px; border-bottom-right-radius: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-    """, unsafe_allow_html=True)
-    
-    btn_col1, btn_col2 = st.columns([3, 1], vertical_alignment="center")
-    
-    with btn_col1:
-        uploaded_file = st.file_uploader(
-            "Upload Excel", 
-            type=["xlsx", "xls"], 
-            label_visibility="collapsed"
-        )
-        if uploaded_file is not None:
-            st.toast("Đã nạp file Excel mới thành công!", icon="✅")
-
-    with btn_col2:
-        if st.button("🔄", help="Khôi phục dữ liệu mặc định"):
-            df_init = pd.DataFrame(RAW_POP_DATA)
-            df_init['free'] = df_init['total'] - df_init['used']
-            df_init['rate'] = (df_init['used'] / df_init['total']) * 100
-            st.session_state['pop_df'] = df_init
-            st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
-            st.rerun()
+    with col_actions:
+        up_col, reset_col = st.columns([3, 1], vertical_alignment="center")
+        with up_col:
+            uploaded_file = st.file_uploader(
+                "Tải file Excel", 
+                type=["xlsx", "xls"], 
+                label_visibility="collapsed"
+            )
+            if uploaded_file is not None:
+                st.toast("Đã nạp file thành công!", icon="✅")
+        with reset_col:
+            if st.button("🔄", help="Khôi phục dữ liệu gốc"):
+                df_init = pd.DataFrame(RAW_POP_DATA)
+                df_init['free'] = df_init['total'] - df_init['used']
+                df_init['rate'] = (df_init['used'] / df_init['total']) * 100
+                st.session_state['pop_df'] = df_init
+                st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
+                st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
 
 # Tính toán các chỉ số
 df_pop = st.session_state['pop_df']
