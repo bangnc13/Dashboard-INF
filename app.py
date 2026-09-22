@@ -224,8 +224,7 @@ with st.container():
                     ">Chi Nhánh TQG</span>
                 </div>
                 <p class="header-text-sub">
-                    Sheet dữ liệu: <b style="color: #fbbf24;">BC</b> | Cập nhật tự động theo file Excel
-                </p>
+                   </p>
             </div>
         </div>
         """, unsafe_allow_html=True)
