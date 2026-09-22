@@ -7,10 +7,10 @@ st.set_page_config(
     page_title="Dashboard Báo cáo Vận hành POP - Chi nhánh TQG",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# --- INJECT CUSTOM CSS MÔ PHỎNG THEO HTML/TAILWIND CSS ---
+# --- INJECT CUSTOM CSS ---
 st.markdown("""
 <style>
     @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
@@ -21,7 +21,12 @@ st.markdown("""
         font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     }
     
-    /* Banner Header */
+    /* Bắt buộc ẩn hoàn toàn Sidebar */
+    [data-testid="stSidebar"] {
+        display: none;
+    }
+    
+    /* Header Container */
     .header-banner {
         background-color: #0f172a;
         color: white;
@@ -29,9 +34,27 @@ st.markdown("""
         border-radius: 16px;
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+    }
+    
+    /* Custom Styling cho File Uploader trong Header */
+    div[data-testid="stFileUploader"] {
+        margin-bottom: 0px;
+    }
+    div[data-testid="stFileUploader"] section {
+        padding: 4px 12px !important;
+        background-color: #10b981 !important;
+        border: none !important;
+        border-radius: 10px !important;
+        color: white !important;
+        min-height: auto !important;
+    }
+    div[data-testid="stFileUploader"] section * {
+        color: white !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+    }
+    div[data-testid="stFileUploader"] section small {
+        display: none !important;
     }
     
     /* Top Stat Card Styling */
@@ -165,39 +188,55 @@ if 'pop_df' not in st.session_state:
 if 'kpi_df' not in st.session_state:
     st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
 
-# --- SIDEBAR ĐIỀU KHẨN ---
-st.sidebar.title("⚙️ Điều khiển Dashboard")
-uploaded_file = st.sidebar.file_uploader("Tải file Excel báo cáo mới (.xlsx)", type=["xlsx", "xls"])
-if uploaded_file is not None:
-    if st.sidebar.button("Xử lý File Excel", type="primary"):
-        # Logic xử lý Excel (giữ nguyên)
-        st.sidebar.success("Đã nạp file thành công!")
+# --- 1. HEADER BANNER VÀ CÁC NÚT ĐIỀU KHIỂN NẰM PHẢI ---
+header_col1, header_col2 = st.columns([3, 2], vertical_alignment="center")
 
-if st.sidebar.button("Khôi phục Dữ liệu Mặc định"):
-    df_init = pd.DataFrame(RAW_POP_DATA)
-    df_init['free'] = df_init['total'] - df_init['used']
-    df_init['rate'] = (df_init['used'] / df_init['total']) * 100
-    st.session_state['pop_df'] = df_init
-    st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
-    st.rerun()
-
-# --- 1. HEADER BANNER ---
-st.markdown("""
-<div class="header-banner">
-    <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="background: rgba(37, 99, 235, 0.2); padding: 10px; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
-            <i class="fa-solid fa-chart-line" style="font-size: 20px; color: #60a5fa;"></i>
-        </div>
-        <div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <h1 style="margin: 0; font-size: 18px; font-weight: 700; color: white;">DASHBOARD PHÒNG KĨ THUẬT</h1>
-                <span style="background: rgba(51, 65, 85, 0.6); color: #cbd5e1; font-size: 11px; padding: 2px 10px; border-radius: 9999px; border: 1px solid #475569;">Chi Nhánh TQG</span>
+with header_col1:
+    st.markdown("""
+    <div style="background-color: #0f172a; padding: 16px 20px; border-top-left-radius: 16px; border-bottom-left-radius: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="background: rgba(37, 99, 235, 0.2); padding: 10px; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <i class="fa-solid fa-chart-line" style="font-size: 20px; color: #60a5fa;"></i>
             </div>
-            <p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 12px;">Sheet dữ liệu: <b style="color: #fbbf24;">BC</b> | Cập nhật tự động theo file Excel</p>
+            <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <h1 style="margin: 0; font-size: 18px; font-weight: 700; color: white;">DASHBOARD PHÒNG KĨ THUẬT</h1>
+                    <span style="background: rgba(51, 65, 85, 0.6); color: #cbd5e1; font-size: 11px; padding: 2px 10px; border-radius: 9999px; border: 1px solid #475569;">Chi Nhánh TQG</span>
+                </div>
+                <p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 12px;">Sheet dữ liệu: <b style="color: #fbbf24;">BC</b> | Cập nhật tự động theo file Excel</p>
+            </div>
         </div>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+with header_col2:
+    st.markdown("""
+    <div style="background-color: #0f172a; padding: 12px 20px; border-top-right-radius: 16px; border-bottom-right-radius: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+    """, unsafe_allow_html=True)
+    
+    btn_col1, btn_col2 = st.columns([3, 1], vertical_alignment="center")
+    
+    with btn_col1:
+        uploaded_file = st.file_uploader(
+            "Upload Excel", 
+            type=["xlsx", "xls"], 
+            label_visibility="collapsed"
+        )
+        if uploaded_file is not None:
+            st.toast("Đã nạp file Excel mới thành công!", icon="✅")
+
+    with btn_col2:
+        if st.button("🔄", help="Khôi phục dữ liệu mặc định"):
+            df_init = pd.DataFrame(RAW_POP_DATA)
+            df_init['free'] = df_init['total'] - df_init['used']
+            df_init['rate'] = (df_init['used'] / df_init['total']) * 100
+            st.session_state['pop_df'] = df_init
+            st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # Tính toán các chỉ số
 df_pop = st.session_state['pop_df']
