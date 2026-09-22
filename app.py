@@ -15,23 +15,83 @@ st.markdown("""
 <style>
     @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
     
-    /* Font & Nền chính */
+    /* Font & Nền chính của toàn app */
     .stApp {
         background-color: #f8fafc;
         font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     }
     
-    /* Ẩn hoàn toàn Sidebar */
+    /* Ẩn Sidebar */
     [data-testid="stSidebar"] {
         display: none;
     }
 
-    /* Tối ưu hóa vùng chứa chính */
+    /* Tối ưu khoảng cách lề trên */
     .main .block-container {
         padding-top: 1.5rem;
         padding-bottom: 2rem;
     }
+
+    /* --- TẠO KHỐI BANNER MÀU TÍM THAN ĐỒNG NHẤT --- */
+    div[data-testid="stVerticalBlock"] > div:has(div.custom-header-marker) {
+        background-color: #0f172a !important; /* Màu tím than chuẩn */
+        border-radius: 16px;
+        padding: 20px 24px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        margin-bottom: 20px;
+    }
     
+    /* Ép tất cả các văn bản bên trong Header thành màu trắng/sáng */
+    .header-text-title {
+        color: #ffffff !important;
+        font-size: 20px;
+        font-weight: 700;
+        margin: 0;
+    }
+    .header-text-sub {
+        color: #94a3b8 !important;
+        font-size: 12px;
+        margin-top: 4px;
+    }
+
+    /* Styling nút Upload file nằm trong nền tím than */
+    div[data-testid="stFileUploader"] {
+        margin-bottom: 0px !important;
+    }
+    div[data-testid="stFileUploader"] section {
+        padding: 6px 12px !important;
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 10px !important;
+        min-height: auto !important;
+    }
+    div[data-testid="stFileUploader"] section:hover {
+        border-color: #3b82f6 !important;
+        background-color: #334155 !important;
+    }
+    div[data-testid="stFileUploader"] section * {
+        color: #f8fafc !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+    }
+    div[data-testid="stFileUploader"] section small {
+        display: none !important;
+    }
+
+    /* Styling nút Reset 🔄 */
+    div[data-testid="stButton"] > button {
+        background-color: #1e293b !important;
+        color: #f8fafc !important;
+        border: 1px solid #334155 !important;
+        border-radius: 10px !important;
+        height: 42px !important;
+        width: 100% !important;
+    }
+    div[data-testid="stButton"] > button:hover {
+        border-color: #3b82f6 !important;
+        color: #60a5fa !important;
+    }
+
     /* Top Stat Card Styling */
     .stat-card {
         background-color: #ffffff;
@@ -91,57 +151,16 @@ st.markdown("""
         justify-content: center;
     }
     
-    /* Styling bảng dữ liệu */
+    /* Table Styling */
     div[data-testid="stDataFrame"] {
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         overflow: hidden;
     }
-
-    /* CSS cho khu vực Upload file tích hợp trong Header tối màu */
-    div[data-testid="stFileUploader"] {
-        margin-bottom: 0px !important;
-    }
-    div[data-testid="stFileUploader"] section {
-        padding: 4px 12px !important;
-        background-color: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-radius: 8px !important;
-        color: #f8fafc !important;
-        min-height: auto !important;
-    }
-    div[data-testid="stFileUploader"] section:hover {
-        border-color: #3b82f6 !important;
-        background-color: #334155 !important;
-    }
-    div[data-testid="stFileUploader"] section * {
-        color: #f8fafc !important;
-        font-size: 12px !important;
-        font-weight: 500 !important;
-    }
-    div[data-testid="stFileUploader"] section small {
-        display: none !important;
-    }
-
-    /* CSS căn chỉnh nút Reset */
-    div[data-testid="stButton"] > button {
-        background-color: #1e293b !important;
-        color: #f8fafc !important;
-        border: 1px solid #334155 !important;
-        border-radius: 8px !important;
-        height: 38px !important;
-        width: 100% !important;
-    }
-    div[data-testid="stButton"] > button:hover {
-        border-color: #3b82f6 !important;
-        color: #60a5fa !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- KHỞI TẠO DỮ LIỆU BAN ĐẦU ---
-DEFAULT_KPI_HEADERS = ['26-W35', '26-W36', '26-W37', '26-W38', '26-T9', 'PLAN M1', '+ / - PLAN']
-
 DEFAULT_KPI_ROWS = [
     {"STT": 1, "CHỈ SỐ KPIS": "Số lượng sự cố (Slg)", "26-W35": "13", "26-W36": "16", "26-W37": "28", "26-W38": "23", "26-T9": "54", "PLAN M1": "50", "+ / - PLAN": "+4"},
     {"STT": 2, "CHỈ SỐ KPIS": "KHG ảnh hưởng/ sự cố (Slg)", "26-W35": "21.00", "26-W36": "16.00", "26-W37": "17.70", "26-W38": "14.20", "26-T9": "16.80", "PLAN M1": "16", "+ / - PLAN": "+1"},
@@ -202,75 +221,66 @@ if 'pop_df' not in st.session_state:
 if 'kpi_df' not in st.session_state:
     st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
 
-# --- 1. HEADER BANNER HOÀN CHỈNH (KHÓI NỀN THỐNG NHẤT) ---
-# Sử dụng container cùng nền tối nguyên khối #0f172a
-st.markdown("""
-<div style="
-    background-color: #0f172a; 
-    border-radius: 16px; 
-    padding: 16px 24px; 
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-    margin-bottom: 20px;
-">
-""", unsafe_allow_html=True)
-
-col_title, col_actions = st.columns([2.5, 1.5], vertical_alignment="center")
-
-with col_title:
-    st.markdown("""
-    <div style="display: flex; align-items: center; gap: 14px;">
-        <div style="
-            background: linear-gradient(135deg, #1e3a8a, #2563eb); 
-            width: 44px; 
-            height: 44px; 
-            border-radius: 12px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
-        ">
-            <i class="fa-solid fa-chart-line" style="font-size: 20px; color: #ffffff;"></i>
-        </div>
-        <div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <h1 style="margin: 0; font-size: 19px; font-weight: 700; color: #ffffff; letter-spacing: 0.3px;">DASHBOARD PHÒNG KĨ THUẬT</h1>
-                <span style="
-                    background: #334155; 
-                    color: #cbd5e1; 
-                    font-size: 11px; 
-                    font-weight: 600;
-                    padding: 2px 10px; 
-                    border-radius: 20px; 
-                    border: 1px solid #475569;
-                ">Chi Nhánh TQG</span>
+# --- 1. HEADER BANNER NỀN TÍM THAN ĐỒNG NHẤT 100% ---
+with st.container():
+    # Thẻ marker để CSS nhận diện và tô màu tím than toàn bộ khối này
+    st.markdown('<div class="custom-header-marker"></div>', unsafe_allow_html=True)
+    
+    col_title, col_actions = st.columns([2.5, 1.5], vertical_alignment="center")
+    
+    with col_title:
+        st.markdown("""
+        <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="
+                background: linear-gradient(135deg, #1e3a8a, #2563eb); 
+                width: 46px; 
+                height: 46px; 
+                border-radius: 12px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center;
+                box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+            ">
+                <i class="fa-solid fa-chart-line" style="font-size: 20px; color: #ffffff;"></i>
             </div>
-            <p style="margin: 2px 0 0 0; color: #94a3b8; font-size: 12px;">
-                Sheet dữ liệu: <b style="color: #fbbf24;">BC</b> | Cập nhật tự động theo file Excel
-            </p>
+            <div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h1 class="header-text-title">DASHBOARD PHÒNG KĨ THUẬT</h1>
+                    <span style="
+                        background: #1e293b; 
+                        color: #94a3b8; 
+                        font-size: 11px; 
+                        font-weight: 600;
+                        padding: 3px 10px; 
+                        border-radius: 20px; 
+                        border: 1px solid #334155;
+                    ">Chi Nhánh TQG</span>
+                </div>
+                <p class="header-text-sub">
+                    Sheet dữ liệu: <b style="color: #fbbf24;">BC</b> | Cập nhật tự động theo file Excel
+                </p>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-with col_actions:
-    up_col, reset_col = st.columns([3.5, 1], vertical_alignment="center")
-    with up_col:
-        uploaded_file = st.file_uploader(
-            "Upload Excel", 
-            type=["xlsx", "xls"], 
-            label_visibility="collapsed"
-        )
-        if uploaded_file is not None:
-            st.toast("Đã nạp file thành công!", icon="✅")
-    with reset_col:
-        if st.button("🔄", help="Khôi phục dữ liệu gốc"):
-            df_init = pd.DataFrame(RAW_POP_DATA)
-            df_init['free'] = df_init['total'] - df_init['used']
-            df_init['rate'] = (df_init['used'] / df_init['total']) * 100
-            st.session_state['pop_df'] = df_init
-            st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
-            st.rerun()
-
-st.markdown("</div>", unsafe_allow_html=True)
+    with col_actions:
+        up_col, reset_col = st.columns([3.5, 1], vertical_alignment="center")
+        with up_col:
+            uploaded_file = st.file_uploader(
+                "Upload Excel", 
+                type=["xlsx", "xls"], 
+                label_visibility="collapsed"
+            )
+            if uploaded_file is not None:
+                st.toast("Đã nạp file thành công!", icon="✅")
+        with reset_col:
+            if st.button("🔄", help="Khôi phục dữ liệu gốc"):
+                df_init = pd.DataFrame(RAW_POP_DATA)
+                df_init['free'] = df_init['total'] - df_init['used']
+                df_init['rate'] = (df_init['used'] / df_init['total']) * 100
+                st.session_state['pop_df'] = df_init
+                st.session_state['kpi_df'] = pd.DataFrame(DEFAULT_KPI_ROWS)
+                st.rerun()
 
 # Tính toán các chỉ số
 df_pop = st.session_state['pop_df']
