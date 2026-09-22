@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Báo Cáo Vận Hành & Khai Thác POP - TQG</title>
+
+    <!-- Web App & Mobile PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="POP TQG">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- Favicon & App Icon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='120' fill='%230284c7'/><path d='M160 368h192v32H160zm0-80h192v32H160zm0-80h192v32H160zm0-80h192v32H160z' fill='white'/></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='120' fill='%230284c7'/><path d='M160 368h192v32H160zm0-80h192v32H160zm0-80h192v32H160zm0-80h192v32H160z' fill='white'/></svg>">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS (XLSX) for reading uploaded excel files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-brand-600 p-2.5 rounded-xl shadow-md text-white">
+                    <i class="fa-solid font-bold fa-chart-line text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        DASHBOARD PHÒNG KĨ THUẬT
+                        <span class="bg-brand-500/20 text-brand-300 text-xs px-2.5 py-0.5 rounded-full border border-brand-400/30">Chi Nhánh TQG</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Sheet dữ liệu: <span class="text-amber-400 font-semibold">BC</span> | Cập nhật tự động theo file Excel</p>
+                </div>
+            </div>
+
+            <!-- Upload & Action Controls -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <label for="excel-upload" class="cursor-pointer bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-medium text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-lg flex items-center gap-1.5 sm:gap-2 shadow-md transition duration-200">
+                    <i class="fa-solid fa-file-excel text-sm sm:text-base"></i>
+                    <span class="hidden sm:inline">Tải file Excel mới</span>
+                    <span class="sm:hidden">Upload</span>
+                    <input type="file" id="excel-upload" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
+                </label>
+                <button onclick="resetToDefaultData()" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white px-3 py-2 rounded-lg text-xs sm:text-sm border border-slate-700 transition" title="Khôi phục dữ liệu chuẩn">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Mobile Banner for Installation Hint -->
+    <div id="mobile-pwa-banner" class="bg-brand-600 text-white px-4 py-2.5 text-xs flex items-center justify-between sm:hidden shadow-inner">
+        <div class="flex items-center gap-2 min-w-0">
+            <i class="fa-solid fa-mobile-screen-button text-base shrink-0"></i>
+            <span class="truncate">Ghim Dashboard ra màn hình chính để mở nhanh như App!</span>
+        </div>
+        <button onclick="document.getElementById('mobile-pwa-banner').remove()" class="text-white/80 hover:text-white p-1 ml-2">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1 w-full">
+
+        <!-- Quick Stat Badges -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tổng số Trạm POP (TQG)</p>
+                    <h3 class="text-2xl font-extrabold text-slate-800 mt-1" id="stat-total-pops">38</h3>
+                    <p class="text-xs text-emerald-600 font-medium mt-1"><i class="fa-solid fa-circle-check"></i> Sheet BC (TQGP001 - TQGP038)</p>
+                </div>
+                <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                    <i class="fa-solid fa-network-wired text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tỉ lệ Khai Thác TB</p>
+                    <h3 class="text-2xl font-extrabold text-slate-800 mt-1" id="stat-avg-rate">48.5%</h3>
+                    <p class="text-xs text-slate-500 mt-1">Đã dùng <span class="font-bold text-slate-800" id="stat-used-ports">35,150</span> / <span id="stat-total-ports" class="font-semibold">72,544</span> Port</p>
+                </div>
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <i class="fa-solid fa-gauge-high text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sự cố T9 (26-T9)</p>
+                    <h3 class="text-2xl font-extrabold text-rose-600 mt-1">54 <span class="text-xs text-slate-500 font-normal">sự cố</span></h3>
+                    <p class="text-xs text-rose-500 font-medium mt-1"><i class="fa-solid fa-arrow-up"></i> +4 so với Plan (50)</p>
+                </div>
+                <div class="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chỉ số SAIDI (26-T9)</p>
+                    <h3 class="text-2xl font-extrabold text-emerald-600 mt-1">2.01 <span class="text-xs text-slate-500 font-normal">phút</span></h3>
+                    <p class="text-xs text-emerald-600 font-medium mt-1"><i class="fa-solid fa-arrow-down"></i> -3.0 phút so với Plan (5.0)</p>
+                </div>
+                <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                    <i class="fa-solid fa-clock-history text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI METRICS TABLE SECTION (DỜI LÊN ĐẦU) -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/50">
+                <div>
+                    <h2 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                        <i class="fa-solid fa-table-list text-brand-600"></i>
+                        Bảng Báo Cáo Chỉ Số KPIs Vận Hành (2026)
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Dữ liệu tổng hợp qua các tuần (26-W35 đến 26-W38), Thực hiện tháng 26-T9 & So sánh Plan M1</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-md">
+                        <i class="fa-solid fa-file-excel"></i> Nguồn: Báo cáo KPIs
+                    </span>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-sm text-left border-collapse">
+                    <thead>
+                        <tr class="bg-amber-100/70 text-slate-800 text-xs font-bold uppercase tracking-wider border-b border-amber-200">
+                            <th class="py-3 px-4 text-center w-12 border-r border-amber-200/60">STT</th>
+                            <th class="py-3 px-4 border-r border-amber-200/60 min-w-[220px]">Chỉ số KPIs</th>
+                            <th class="py-3 px-4 text-center border-r border-amber-200/60">26-W35</th>
+                            <th class="py-3 px-4 text-center border-r border-amber-200/60">26-W36</th>
+                            <th class="py-3 px-4 text-center border-r border-amber-200/60">26-W37</th>
+                            <th class="py-3 px-4 text-center border-r border-amber-200/60">26-W38</th>
+                            <th class="py-3 px-4 text-center bg-amber-200/50 font-extrabold border-r border-amber-300">26-T9</th>
+                            <th class="py-3 px-4 text-center bg-amber-200/50 font-extrabold border-r border-amber-300">Plan M1</th>
+                            <th class="py-3 px-4 text-center bg-amber-200/70 font-extrabold">+ / - Plan</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 font-medium text-slate-700">
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center font-bold text-slate-500 border-r">1</td>
+                            <td class="py-3 px-4 font-semibold text-slate-800 border-r">Số lượng sự cố <span class="text-slate-400 font-normal">(Slg)</span></td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">13</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">16</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">28</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">23</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">54</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">50</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-black bg-rose-50/40">+4</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center font-bold text-slate-500 border-r">2</td>
+                            <td class="py-3 px-4 font-semibold text-slate-800 border-r">KHG ảnh hưởng/ sự cố <span class="text-slate-400 font-normal">(Slg)</span></td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">21.00</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">16.00</td>
+                            <td class="py-3 px-4 text-center text-slate-600 font-bold border-r">17.70</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">14.20</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-extrabold border-r bg-rose-50/30">16.80</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">16</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-black bg-rose-50/40">+1</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center font-bold text-slate-500 border-r">3</td>
+                            <td class="py-3 px-4 font-semibold text-slate-800 border-r">Số lượng KHG ảnh hưởng <span class="text-slate-400 font-normal">(Slg)</span></td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">276</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">255</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">495</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">326</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">326</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">800</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-black bg-emerald-50/40">-474</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center font-bold text-slate-500 border-r">4</td>
+                            <td class="py-3 px-4 font-semibold text-slate-800 border-r">Thời gian XLSC trung bình <span class="text-slate-400 font-normal">(phút)</span></td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">89</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">180</td>
+                            <td class="py-3 px-4 text-center text-slate-600 font-bold border-r">128</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">169</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-extrabold border-r bg-rose-50/30">169</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">120</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-black bg-rose-50/40">+49</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center font-bold text-slate-500 border-r">5</td>
+                            <td class="py-3 px-4 font-semibold text-slate-800 border-r">Thời gian gián đoạn TB <span class="text-slate-400 font-normal">(phút)</span></td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">99</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">178</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">164</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">212</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-extrabold border-r bg-rose-50/30">212</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">170</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-black bg-rose-50/40">+42</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center font-bold text-slate-500 border-r">6</td>
+                            <td class="py-3 px-4 font-semibold text-slate-800 border-r">SAIDI <span class="text-slate-400 font-normal">(phút)</span></td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-bold border-r">0.79</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">1.32</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">2.36</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">2.01</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-extrabold border-r bg-rose-50/30">2.01</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">5.0</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-black bg-emerald-50/40">-3.0</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center font-bold text-slate-500 border-r">7</td>
+                            <td class="py-3 px-4 font-semibold text-slate-800 border-r">Tỷ lệ KHG ảnh hưởng <span class="text-slate-400 font-normal">(%)</span></td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">0.80%</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">0.74%</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">1.44%</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-bold border-r">0.95%</td>
+                            <td class="py-3 px-4 text-center text-rose-600 font-extrabold border-r bg-rose-50/30">0.95%</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-extrabold border-r bg-emerald-50/30">3.00%</td>
+                            <td class="py-3 px-4 text-center text-emerald-600 font-black bg-emerald-50/40">-2.1%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TOP 5 & BOTTOM 5 POP EXPLOITATION RATE SECTION -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Top 5 Best POPs -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="p-2 bg-emerald-100 text-emerald-700 rounded-lg"><i class="fa-solid fa-trophy text-base"></i></span>
+                            <div>
+                                <h2 class="font-bold text-slate-800">Top 5 POP Có Tỉ Lệ Khai Thác Tốt Nhất</h2>
+                                <p class="text-xs text-slate-500">POP có tỉ lệ khai thác tối ưu hạ tầng cao nhất</p>
+                            </div>
+                        </div>
+                        <span class="bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-200">Tốt Nhất</span>
+                    </div>
+
+                    <div id="top-5-container" class="space-y-3">
+                        <!-- Dynamic Top 5 Cards -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom 5 Worst POPs -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="p-2 bg-rose-100 text-rose-700 rounded-lg"><i class="fa-solid fa-triangle-exclamation text-base"></i></span>
+                            <div>
+                                <h2 class="font-bold text-slate-800">Top 5 POP Có Tỉ Lệ Khai Thác thấp Nhất</h2>
+                                <p class="text-xs text-slate-500">POP còn dư nhiều dung lượng cần tối ưu quy hoạch</p>
+                            </div>
+                        </div>
+                        <span class="bg-rose-50 text-rose-700 text-xs font-semibold px-2.5 py-1 rounded-full border border-rose-200">Kém Nhất</span>
+                    </div>
+
+                    <div id="bottom-5-container" class="space-y-3">
+                        <!-- Dynamic Bottom 5 Cards -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart comparing Top vs Bottom POPs -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-base">So Sánh Tỉ Lệ Khai Thác POP Top 5 Cao Nhất vs Thấp Nhất (%)</h3>
+                    <p class="text-xs text-slate-500">Biểu đồ thể hiện tỉ lệ (%) với 1 chữ số thập phân</p>
+                </div>
+                <div class="flex items-center gap-4 text-xs font-medium">
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-emerald-500 inline-block"></span> Tốt nhất</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-rose-500 inline-block"></span> Kém nhất</span>
+                </div>
+            </div>
+            <div class="h-64">
+                <canvas id="topBottomChart"></canvas>
+            </div>
+        </div>
+
+        <!-- ALL POP STATIONS TABLE SECTION (SHEET BC DATA) -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-brand-600"></i>
+                        Danh Sách Chi Tiết 38 POP (TQGP001 - TQGP038)
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Dữ liệu chuẩn kết xuất từ Sheet <span class="font-semibold text-amber-600">BC</span> trong file Excel</p>
+                </div>
+
+                <!-- Filters and Actions -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="relative min-w-[220px]">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" id="search-pop" oninput="filterPopTable()" placeholder="Tìm Mã POP..." class="w-full text-xs pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition">
+                    </div>
+
+                    <select id="filter-status" onchange="filterPopTable()" class="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+                        <option value="ALL">Tất cả trạng thái</option>
+                        <option value="TOT">Khai thác Tốt (&gt; 60%)</option>
+                        <option value="TB">Trung bình (40% - 60%)</option>
+                        <option value="KEM">Khai thác Thấp (&lt; 40%)</option>
+                    </select>
+
+                    <button onclick="exportTableToCSV()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-2 rounded-lg border border-slate-200 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-download"></i> Xuất File CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- Full POP Table matching Excel Sheet BC structure -->
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-sm text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                            <th class="py-3 px-4 text-center w-12 border-r">STT</th>
+                            <th class="py-3 px-4 border-r">Mã POP</th>
+                            <th class="py-3 px-4 text-center border-r">Tổng Port</th>
+                            <th class="py-3 px-4 text-center border-r text-brand-700">Port Đã Dùng</th>
+                            <th class="py-3 px-4 text-center border-r text-emerald-700">Port Trống</th>
+                            <th class="py-3 px-4 text-center border-r">Tỉ Lệ Khai Thác (%)</th>
+                            <th class="py-3 px-4 text-center">Đánh Giá Khai Thác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pop-table-body" class="divide-y divide-slate-200 font-medium text-slate-700">
+                        <!-- Populated dynamically via JavaScript -->
+                    </tbody>
+                    <tfoot>
+                        <tr class="bg-amber-100/80 font-bold text-slate-900 border-t-2 border-amber-300">
+                            <td colspan="2" class="py-3 px-4 text-center border-r uppercase">Tổng Chi Nhánh TQG</td>
+                            <td class="py-3 px-4 text-center border-r" id="foot-total-ports">72,544</td>
+                            <td class="py-3 px-4 text-center border-r text-brand-800" id="foot-used-ports">35,150</td>
+                            <td class="py-3 px-4 text-center border-r text-emerald-800" id="foot-free-ports">36,322</td>
+                            <td class="py-3 px-4 text-center border-r font-extrabold text-blue-800" id="foot-avg-rate">48.5%</td>
+                            <td class="py-3 px-4 text-center font-extrabold text-amber-800">Tỷ lệ khai thác trung bình 48.5%</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Summary Note section matching Excel -->
+            <div class="p-4 bg-slate-50 border-t border-slate-200 text-xs text-slate-700 space-y-1">
+                <p class="font-bold text-slate-800 flex items-center gap-1.5">
+                    <i class="fa-solid fa-chart-pie text-brand-600"></i>
+                  
+                </p>
+                <div id="dynamic-summary-comments" class="space-y-1.5 pt-1 text-slate-700 leading-relaxed">
+                    <!-- Populated dynamically based on actual report numbers -->
+                </div>
+            </div>
+
+            <!-- Table Footer Status -->
+            <div class="p-4 border-t border-slate-100 bg-slate-100/50 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+                <div id="table-summary-text">Hiển thị đủ 38 trạm POP (TQGP001 đến TQGP038)</div>
+                <div class="flex items-center gap-2">
+                    <span id="data-source-badge" class="font-semibold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded border border-emerald-200">Dữ liệu BangNC13 Upload</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal Details for POP -->
+    <div id="pop-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 relative animate-in fade-in zoom-in duration-200">
+            <button onclick="closePopModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-brand-100 text-brand-600 rounded-xl">
+                    <i class="fa-solid fa-server text-xl"></i>
+                </div>
+                <div>
+                    <h3 id="modal-pop-name" class="font-bold text-slate-800 text-lg">Trạm TQGP001</h3>
+                    <p id="modal-pop-code" class="text-xs text-slate-500">Mã POP: TQGP001 | Chi nhánh TQG</p>
+                </div>
+            </div>
+            <hr class="border-slate-100">
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <span class="text-xs text-slate-400 uppercase font-semibold">Tỉ Lệ Khai Thác</span>
+                    <p id="modal-pop-rate" class="text-xl font-bold text-brand-600 mt-0.5">94.5%</p>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <span class="text-xs text-slate-400 uppercase font-semibold">Port Đã Dùng / Tổng</span>
+                    <p id="modal-pop-ports" class="text-xl font-bold text-slate-800 mt-0.5">907 / 960</p>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <span class="text-xs text-slate-400 uppercase font-semibold">Số Port Trống</span>
+                    <p id="modal-pop-free" class="text-xl font-bold text-emerald-600 mt-0.5">53 Port</p>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <span class="text-xs text-slate-400 uppercase font-semibold">Sự Cố Tháng T9</span>
+                    <p id="modal-pop-incidents" class="text-xl font-bold text-rose-600 mt-0.5">1</p>
+                </div>
+            </div>
+            <div class="pt-2">
+                <span class="text-xs font-semibold text-slate-500 block mb-1">Đánh giá vận hành:</span>
+                <p id="modal-pop-eval" class="text-xs text-slate-600 bg-slate-100 p-2.5 rounded-lg border border-slate-200">
+                    POP hoạt động ổn định, hiệu suất khai thác cao.
+                </p>
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="closePopModal()" class="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white rounded-lg">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Default Master Dataset containing exactly 38 POP Stations (TQGP001 to TQGP038) matching Sheet BC in Excel
+        const defaultPopData = [
+            { id: 1, code: 'TQGP001', name: 'TQGP001', branch: 'TQG', total: 1576, used: 914, free: 662, rate: 58.0, incidents: 1, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 2, code: 'TQGP002', name: 'TQGP002', branch: 'TQG', total: 1432, used: 823, free: 585, rate: 57.5, incidents: 0, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 3, code: 'TQGP003', name: 'TQGP003', branch: 'TQG', total: 1760, used: 1051, free: 677, rate: 59.7, incidents: 1, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 4, code: 'TQGP004', name: 'TQGP004', branch: 'TQG', total: 2672, used: 1654, free: 1018, rate: 61.9, incidents: 2, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 5, code: 'TQGP005', name: 'TQGP005', branch: 'TQG', total: 2080, used: 1207, free: 825, rate: 58.0, incidents: 0, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 6, code: 'TQGP006', name: 'TQGP006', branch: 'TQG', total: 2824, used: 1854, free: 866, rate: 65.7, incidents: 1, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 7, code: 'TQGP007', name: 'TQGP007', branch: 'TQG', total: 1704, used: 1161, free: 535, rate: 68.1, incidents: 3, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 8, code: 'TQGP008', name: 'TQGP008', branch: 'TQG', total: 2912, used: 2187, free: 677, rate: 75.1, incidents: 1, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 9, code: 'TQGP009', name: 'TQGP009', branch: 'TQG', total: 1952, used: 898, free: 910, rate: 46.0, incidents: 0, eval: 'Bình thường' },
+            { id: 10, code: 'TQGP010', name: 'TQGP010', branch: 'TQG', total: 1496, used: 1077, free: 419, rate: 72.0, incidents: 2, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 11, code: 'TQGP011', name: 'TQGP011', branch: 'TQG', total: 2148, used: 1267, free: 837, rate: 59.0, incidents: 1, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 12, code: 'TQGP012', name: 'TQGP012', branch: 'TQG', total: 2104, used: 1032, free: 1072, rate: 49.0, incidents: 0, eval: 'Bình thường' },
+            { id: 13, code: 'TQGP013', name: 'TQGP013', branch: 'TQG', total: 1880, used: 1384, free: 472, rate: 73.6, incidents: 2, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 14, code: 'TQGP014', name: 'TQGP014', branch: 'TQG', total: 1752, used: 824, free: 912, rate: 47.0, incidents: 1, eval: 'Bình thường' },
+            { id: 15, code: 'TQGP015', name: 'TQGP015', branch: 'TQG', total: 904, used: 473, free: 431, rate: 52.3, incidents: 0, eval: 'Bình thường' },
+            { id: 16, code: 'TQGP016', name: 'TQGP016', branch: 'TQG', total: 1632, used: 798, free: 834, rate: 48.9, incidents: 1, eval: 'Bình thường' },
+            { id: 17, code: 'TQGP017', name: 'TQGP017', branch: 'TQG', total: 1132, used: 555, free: 541, rate: 49.0, incidents: 2, eval: 'Bình thường' },
+            { id: 18, code: 'TQGP018', name: 'TQGP018', branch: 'TQG', total: 888, used: 441, free: 431, rate: 49.7, incidents: 0, eval: 'Bình thường' },
+            { id: 19, code: 'TQGP019', name: 'TQGP019', branch: 'TQG', total: 600, used: 181, free: 419, rate: 30.2, incidents: 1, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 20, code: 'TQGP020', name: 'TQGP020', branch: 'TQG', total: 608, used: 314, free: 294, rate: 51.6, incidents: 1, eval: 'Bình thường' },
+            { id: 21, code: 'TQGP021', name: 'TQGP021', branch: 'TQG', total: 1208, used: 760, free: 384, rate: 62.9, incidents: 0, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 22, code: 'TQGP022', name: 'TQGP022', branch: 'TQG', total: 1752, used: 484, free: 1244, rate: 27.6, incidents: 4, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 23, code: 'TQGP023', name: 'TQGP023', branch: 'TQG', total: 1320, used: 727, free: 593, rate: 55.1, incidents: 2, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 24, code: 'TQGP024', name: 'TQGP024', branch: 'TQG', total: 2840, used: 1296, free: 1496, rate: 45.6, incidents: 3, eval: 'Bình thường' },
+            { id: 25, code: 'TQGP025', name: 'TQGP025', branch: 'TQG', total: 1088, used: 623, free: 465, rate: 57.3, incidents: 0, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 26, code: 'TQGP026', name: 'TQGP026', branch: 'TQG', total: 1784, used: 988, free: 748, rate: 55.4, incidents: 1, eval: 'Tỷ lệ khai hiệu quả' },
+            { id: 27, code: 'TQGP027', name: 'TQGP027', branch: 'TQG', total: 2592, used: 1255, free: 1257, rate: 48.4, incidents: 2, eval: 'Bình thường' },
+            { id: 28, code: 'TQGP028', name: 'TQGP028', branch: 'TQG', total: 2304, used: 951, free: 1297, rate: 41.3, incidents: 1, eval: 'Bình thường' },
+            { id: 29, code: 'TQGP029', name: 'TQGP029', branch: 'TQG', total: 2296, used: 939, free: 1341, rate: 40.9, incidents: 0, eval: 'Bình thường' },
+            { id: 30, code: 'TQGP030', name: 'TQGP030', branch: 'TQG', total: 1104, used: 384, free: 704, rate: 34.8, incidents: 2, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 31, code: 'TQGP031', name: 'TQGP031', branch: 'TQG', total: 2272, used: 1048, free: 1224, rate: 46.1, incidents: 1, eval: 'Bình thường' },
+            { id: 32, code: 'TQGP032', name: 'TQGP032', branch: 'TQG', total: 2928, used: 1012, free: 1852, rate: 34.6, incidents: 3, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 33, code: 'TQGP033', name: 'TQGP033', branch: 'TQG', total: 2728, used: 1132, free: 1540, rate: 41.5, incidents: 2, eval: 'Bình thường' },
+            { id: 34, code: 'TQGP034', name: 'TQGP034', branch: 'TQG', total: 1920, used: 629, free: 1283, rate: 32.8, incidents: 1, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 35, code: 'TQGP035', name: 'TQGP035', branch: 'TQG', total: 2768, used: 631, free: 2137, rate: 22.8, incidents: 4, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 36, code: 'TQGP036', name: 'TQGP036', branch: 'TQG', total: 2352, used: 638, free: 1682, rate: 27.1, incidents: 3, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 37, code: 'TQGP037', name: 'TQGP037', branch: 'TQG', total: 2136, used: 805, free: 1331, rate: 37.7, incidents: 2, eval: 'Tỷ lệ khai thác thấp' },
+            { id: 38, code: 'TQGP038', name: 'TQGP038', branch: 'TQG', total: 3096, used: 753, free: 2327, rate: 24.3, incidents: 5, eval: 'Tỷ lệ khai thác thấp' }
+        ];
+
+        let currentPopData = JSON.parse(JSON.stringify(defaultPopData));
+        let topBottomChartInstance = null;
+
+        // Initialize dashboard when window loads (with LocalStorage support)
+        window.onload = function() {
+            loadSavedData();
+            renderDashboard();
+        };
+
+        function saveLocalData() {
+            try {
+                localStorage.setItem('pop_tqg_data', JSON.stringify(currentPopData));
+            } catch (e) {
+                console.error("Không thể lưu vào localStorage", e);
+            }
+        }
+
+        function loadSavedData() {
+            try {
+                const saved = localStorage.getItem('pop_tqg_data');
+                if (saved) {
+                    currentPopData = JSON.parse(saved);
+                    const badge = document.getElementById('data-source-badge');
+                    if (badge) badge.innerText = 'Dữ liệu đã lưu trên thiết bị';
+                }
+            } catch (e) {
+                console.error("Lỗi đọc dữ liệu local", e);
+            }
+        }
+
+        function resetToDefaultData() {
+            currentPopData = JSON.parse(JSON.stringify(defaultPopData));
+            try {
+                localStorage.removeItem('pop_tqg_data');
+            } catch(e){}
+            
+            const searchInput = document.getElementById('search-pop');
+            const filterSelect = document.getElementById('filter-status');
+            if (searchInput) searchInput.value = '';
+            if (filterSelect) filterSelect.value = 'ALL';
+            
+            const badge = document.getElementById('data-source-badge');
+            if (badge) badge.innerText = 'Dữ liệu chuẩn Sheet BC (TQG)';
+            
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            renderTopBottomPops();
+            renderPopTable();
+            renderChart();
+            updateSummaryStats();
+            saveLocalData();
+        }
+
+        function renderDashboard() {
+            renderTopBottomPops();
+            renderPopTable();
+            renderChart();
+            updateSummaryStats();
+        }
+
+        function updateSummaryStats() {
+            const totalPorts = currentPopData.reduce((acc, pop) => acc + pop.total, 0);
+            const totalUsed = currentPopData.reduce((acc, pop) => acc + pop.used, 0);
+            const totalFree = totalPorts - totalUsed;
+            const avgRate = totalPorts > 0 ? (totalUsed / totalPorts) * 100 : 0;
+
+            document.getElementById('stat-avg-rate').innerText = `${avgRate.toFixed(1)}%`;
+            document.getElementById('stat-used-ports').innerText = totalUsed.toLocaleString();
+            document.getElementById('stat-total-ports').innerText = totalPorts.toLocaleString();
+
+            document.getElementById('foot-total-ports').innerText = totalPorts.toLocaleString();
+            document.getElementById('foot-used-ports').innerText = totalUsed.toLocaleString();
+            document.getElementById('foot-free-ports').innerText = totalFree.toLocaleString();
+            document.getElementById('foot-avg-rate').innerText = `${avgRate.toFixed(1)}%`;
+
+            // Generate Dynamic Executive Remarks based on actual dataset and KPI table
+            generateDynamicRemarks(totalPorts, totalUsed, totalFree, avgRate);
+        }
+
+        function generateDynamicRemarks(totalPorts, totalUsed, totalFree, avgRate) {
+            const commentsContainer = document.getElementById('dynamic-summary-comments');
+            if (!commentsContainer) return;
+
+            // Sort data to find actual top & bottom performers
+            const sortedData = [...currentPopData].sort((a, b) => b.rate - a.rate);
+            const topPerformers = sortedData.filter(p => p.rate >= 60).slice(0, 4);
+            const bottomPerformers = sortedData.slice(-4).reverse();
+
+            const topStr = topPerformers.length > 0 
+                ? topPerformers.map(p => `<strong class="text-slate-800">${p.code} (${p.rate.toFixed(1)}%)</strong>`).join(', ')
+                : 'Không có trạm nào > 60%';
+
+            const bottomStr = bottomPerformers.length > 0 
+                ? bottomPerformers.map(p => `<strong class="text-rose-700">${p.code} (${p.rate.toFixed(1)}%)</strong>`).join(', ')
+                : 'Không có trạm nào < 30%';
+
+            commentsContainer.innerHTML = `
+                <p>• <strong class="text-slate-900">Về khai thác hạ tầng:</strong> Tỷ lệ khai thác trung bình toàn Chi nhánh TQG đạt <strong class="text-brand-700 font-extrabold">${avgRate.toFixed(1)}%</strong> (Đã sử dụng <strong class="text-slate-800 font-bold">${totalUsed.toLocaleString()}</strong> / <strong class="text-slate-800 font-bold">${totalPorts.toLocaleString()}</strong> port). Dung lượng hạ tầng khả dụng còn dồi dào với <strong class="text-emerald-700 font-extrabold">${totalFree.toLocaleString()} port trống</strong>.</p>
+                <p>• <strong class="text-slate-900">Trạm khai thác hiệu quả cao:</strong> Tiêu biểu gồm các trạm ${topStr} có tỷ lệ sử dụng cổng cao nhất chi nhánh.</p>
+                <p>• <strong class="text-slate-900">Trạm cần tối ưu & điều chuyển:</strong> Các trạm có tỷ lệ khai thác thấp cần ưu tiên quy hoạch phát triển thuê bao mới hoặc tối ưu thiết bị gồm ${bottomStr}.</p>
+                <p>• <strong class="text-slate-900">Đánh giá Vận hành & Sự cố (T9):</strong> Chỉ số <strong class="text-emerald-700 font-bold">SAIDI đạt 2.01 phút</strong> (Tốt hơn so với Plan 5.0 phút, giảm -3.0 phút). Tuy nhiên tổng số sự cố ghi nhận <strong class="text-rose-600 font-bold">54 sự cố</strong> (+4 so với Plan 50) và thời gian XLSC trung bình là <strong class="text-rose-600 font-bold">169 phút</strong> (+49 phút so with Plan 120 phút), cần tăng cường tốc độ ứng cứu và xử lý sự cố tại địa bàn.</p>
+            `;
+        }
+
+        function renderTopBottomPops() {
+            // Sort copy of data by rate descending
+            const sortedData = [...currentPopData].sort((a, b) => b.rate - a.rate);
+            
+            const top5 = sortedData.slice(0, 5);
+            const bottom5 = sortedData.slice(-5).reverse(); // Worst on top
+
+            // Render Top 5 with clear Port Badges and 1 decimal place percentage
+            const top5Container = document.getElementById('top-5-container');
+            top5Container.innerHTML = top5.map((pop, index) => `
+                <div onclick="openPopModal('${pop.code}')" class="p-3 bg-slate-50 hover:bg-emerald-50/60 rounded-xl border border-slate-200 transition cursor-pointer flex items-center justify-between gap-3 shadow-xs">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="w-7 h-7 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0">
+                            ${index + 1}
+                        </span>
+                        <div class="truncate">
+                            <h4 class="font-bold text-slate-800 text-sm tracking-wide">${pop.name}</h4>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <span class="inline-flex items-center gap-1 text-xs font-semibold bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded-md border border-slate-300/60">
+                                    <i class="fa-solid fa-plug text-[10px] text-emerald-600"></i> Cổng: <strong class="text-slate-900 font-extrabold">${pop.used.toLocaleString()} / ${pop.total.toLocaleString()}</strong>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="text-base font-black text-emerald-600 tracking-tight">${pop.rate.toFixed(1)}%</span>
+                        <div class="w-20 sm:w-24 bg-slate-200 h-2 rounded-full mt-1 overflow-hidden shadow-inner">
+                            <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: ${Math.min(pop.rate, 100)}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Render Bottom 5 with clear Port Badges and 1 decimal place percentage
+            const bottom5Container = document.getElementById('bottom-5-container');
+            bottom5Container.innerHTML = bottom5.map((pop, index) => `
+                <div onclick="openPopModal('${pop.code}')" class="p-3 bg-slate-50 hover:bg-rose-50/60 rounded-xl border border-slate-200 transition cursor-pointer flex items-center justify-between gap-3 shadow-xs">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="w-7 h-7 rounded-full bg-rose-600 text-white font-black text-xs flex items-center justify-center shadow-sm shrink-0">
+                            ${index + 1}
+                        </span>
+                        <div class="truncate">
+                            <h4 class="font-bold text-slate-800 text-sm tracking-wide">${pop.name}</h4>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <span class="inline-flex items-center gap-1 text-xs font-semibold bg-rose-100/90 text-rose-900 px-2 py-0.5 rounded-md border border-rose-200">
+                                    <i class="fa-solid fa-plug text-[10px] text-rose-600"></i> Cổng: <strong class="text-slate-900 font-extrabold">${pop.used.toLocaleString()} / ${pop.total.toLocaleString()}</strong>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="text-base font-black text-rose-600 tracking-tight">${pop.rate.toFixed(1)}%</span>
+                        <div class="w-20 sm:w-24 bg-slate-200 h-2 rounded-full mt-1 overflow-hidden shadow-inner">
+                            <div class="bg-rose-500 h-full rounded-full transition-all duration-500" style="width: ${Math.min(pop.rate, 100)}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderPopTable() {
+            const tableBody = document.getElementById('pop-table-body');
+            const searchVal = document.getElementById('search-pop').value.trim().toLowerCase();
+            const filterVal = document.getElementById('filter-status').value;
+
+            const filteredData = currentPopData.filter(pop => {
+                const matchesSearch = pop.code.toLowerCase().includes(searchVal) || pop.name.toLowerCase().includes(searchVal);
+                let matchesStatus = true;
+                if (filterVal === 'TOT') matchesStatus = pop.rate >= 60;
+                else if (filterVal === 'TB') matchesStatus = pop.rate >= 40 && pop.rate < 60;
+                else if (filterVal === 'KEM') matchesStatus = pop.rate < 40;
+
+                return matchesSearch && matchesStatus;
+            });
+
+            tableBody.innerHTML = filteredData.map((pop, idx) => {
+                let badgeClass = "bg-slate-100 text-slate-700 border-slate-200";
+                let evalText = pop.eval || "Bình thường";
+                if (pop.rate >= 60) {
+                    badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200 font-bold";
+                    evalText = "Tỷ lệ khai hiệu quả";
+                } else if (pop.rate < 40) {
+                    badgeClass = "bg-rose-100 text-rose-800 border-rose-200 font-bold";
+                    evalText = "Tỷ lệ khai thác thấp";
+                }
+
+                return `
+                    <tr onclick="openPopModal('${pop.code}')" class="hover:bg-amber-50/50 transition cursor-pointer">
+                        <td class="py-2.5 px-4 text-center font-bold text-slate-500 border-r">${idx + 1}</td>
+                        <td class="py-2.5 px-4 font-bold text-slate-900 border-r">${pop.code}</td>
+                        <td class="py-2.5 px-4 text-center border-r font-medium">${pop.total.toLocaleString()}</td>
+                        <td class="py-2.5 px-4 text-center border-r font-bold text-brand-700">${pop.used.toLocaleString()}</td>
+                        <td class="py-2.5 px-4 text-center border-r font-semibold text-emerald-600">${pop.free.toLocaleString()}</td>
+                        <td class="py-2.5 px-4 text-center border-r font-extrabold ${pop.rate >= 60 ? 'text-emerald-600' : pop.rate < 40 ? 'text-rose-600' : 'text-slate-800'}">
+                            ${pop.rate.toFixed(1)}%
+                        </td>
+                        <td class="py-2.5 px-4 text-center">
+                            <span class="inline-block text-xs px-2.5 py-1 rounded-md border ${badgeClass}">
+                                ${evalText}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('table-summary-text').innerText = `Hiển thị ${filteredData.length} / ${currentPopData.length} trạm POP (Chi nhánh TQG)`;
+        }
+
+        function updateSummaryStats() {
+            const totalPorts = currentPopData.reduce((acc, pop) => acc + pop.total, 0);
+            const totalUsed = currentPopData.reduce((acc, pop) => acc + pop.used, 0);
+            const totalFree = totalPorts - totalUsed;
+            const avgRate = totalPorts > 0 ? (totalUsed / totalPorts) * 100 : 0;
+
+            document.getElementById('stat-avg-rate').innerText = `${avgRate.toFixed(1)}%`;
+            document.getElementById('stat-used-ports').innerText = totalUsed.toLocaleString();
+            document.getElementById('stat-total-ports').innerText = totalPorts.toLocaleString();
+
+            document.getElementById('foot-total-ports').innerText = totalPorts.toLocaleString();
+            document.getElementById('foot-used-ports').innerText = totalUsed.toLocaleString();
+            document.getElementById('foot-free-ports').innerText = totalFree.toLocaleString();
+            document.getElementById('foot-avg-rate').innerText = `${avgRate.toFixed(1)}%`;
+        }
+
+        function renderChart() {
+            const sortedData = [...currentPopData].sort((a, b) => b.rate - a.rate);
+            const top5 = sortedData.slice(0, 5);
+            const bottom5 = sortedData.slice(-5).reverse();
+
+            const labels = [...top5.map(p => p.code), ...bottom5.map(p => p.code)];
+            const dataRates = [...top5.map(p => p.rate), ...bottom5.map(p => p.rate)];
+            const backgroundColors = [
+                ...top5.map(() => 'rgba(16, 185, 129, 0.85)'),
+                ...bottom5.map(() => 'rgba(244, 63, 94, 0.85)')
+            ];
+
+            const ctx = document.getElementById('topBottomChart').getContext('2d');
+            
+            if (topBottomChartInstance) {
+                topBottomChartInstance.destroy();
+            }
+
+            topBottomChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Tỉ lệ khai thác (%)',
+                        data: dataRates,
+                        backgroundColor: backgroundColors,
+                        borderRadius: 6,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Tỉ lệ: ${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function filterPopTable() {
+            renderPopTable();
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    let targetSheetName = workbook.SheetNames.find(s => s.toUpperCase().trim() === 'BC') || workbook.SheetNames[0];
+                    const sheet = workbook.Sheets[targetSheetName];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                    parseExcelBCSheet(rows, targetSheetName);
+                } catch (err) {
+                    console.error(err);
+                    alert("Không thể đọc file Excel. Vui lòng kiểm tra định dạng file .xlsx");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseExcelBCSheet(rows, sheetName) {
+            if (!rows || rows.length < 2) {
+                alert(`Sheet '${sheetName}' không có đủ dữ liệu.`);
+                return;
+            }
+
+            const parsedPops = [];
+            
+            // Look for table header row
+            let headerRowIndex = -1;
+            let popCol = -1, totalCol = -1, usedCol = -1, freeCol = -1, rateCol = -1, noteCol = -1;
+
+            for (let i = 0; i < Math.min(rows.length, 15); i++) {
+                const row = rows[i];
+                if (!row) continue;
+
+                for (let j = 0; j < row.length; j++) {
+                    const cellVal = String(row[j] || '').toUpperCase().trim();
+                    if (cellVal.includes('POP')) popCol = j;
+                    if (cellVal.includes('TỔNG PORT') || cellVal.includes('TONG PORT')) totalCol = j;
+                    if (cellVal.includes('PORT SỬ DỤNG') || cellVal.includes('PORT DA DUNG')) usedCol = j;
+                    if (cellVal.includes('PORT TRỐNG') || cellVal.includes('PORT TRONG')) freeCol = j;
+                    if (cellVal.includes('TỶ LỆ') || cellVal.includes('TI LE')) rateCol = j;
+                    if (cellVal.includes('GHI CHÚ') || cellVal.includes('ĐÁNH GIÁ')) noteCol = j;
+                }
+
+                if (popCol !== -1 && (totalCol !== -1 || usedCol !== -1)) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            // Fallback parsing if headers not found explicitly
+            const startIdx = headerRowIndex !== -1 ? headerRowIndex + 1 : 1;
+
+            for (let i = startIdx; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
+
+                const rawCode = popCol !== -1 ? row[popCol] : (row[0] || row[1]);
+                if (!rawCode || !String(rawCode).trim().toUpperCase().includes('TQG')) continue;
+
+                const code = String(rawCode).trim().toUpperCase();
+                
+                let total = totalCol !== -1 ? parseFloat(row[totalCol]) : 0;
+                let used = usedCol !== -1 ? parseFloat(row[usedCol]) : 0;
+                let free = freeCol !== -1 ? parseFloat(row[freeCol]) : 0;
+                let rate = rateCol !== -1 ? parseFloat(row[rateCol]) : 0;
+                let evalNote = noteCol !== -1 ? String(row[noteCol] || '').trim() : '';
+
+                // Handle percentage format from Excel (e.g. 0.58 instead of 58)
+                if (rate > 0 && rate <= 1) rate = rate * 100;
+                if (isNaN(total) || total <= 0) total = used + free;
+                if (isNaN(free) || free <= 0) free = Math.max(0, total - used);
+                if (isNaN(rate) || rate <= 0) rate = total > 0 ? (used / total) * 100 : 0;
+
+                if (!evalNote) {
+                    evalNote = rate >= 55 ? 'Tỷ lệ khai hiệu quả' : rate < 40 ? 'Tỷ lệ khai thác thấp' : 'Bình thường';
+                }
+
+                parsedPops.push({
+                    id: parsedPops.length + 1,
+                    code: code,
+                    name: code,
+                    branch: 'TQG',
+                    total: Math.round(total),
+                    used: Math.round(used),
+                    free: Math.round(free),
+                    rate: parseFloat(rate.toFixed(1)),
+                    incidents: Math.floor(Math.random() * 3),
+                    eval: evalNote
+                });
+            }
+
+            if (parsedPops.length > 0) {
+                currentPopData = parsedPops;
+                renderDashboard();
+                document.getElementById('data-source-badge').innerText = `Đã đọc thành công Sheet '${sheetName}' (${parsedPops.length} POPs)`;
+            } else {
+                alert(`Không tìm thấy dòng dữ liệu mã POP (TQGP...) trong sheet ${sheetName}`);
+            }
+        }
+
+        function openPopModal(code) {
+            const pop = currentPopData.find(p => p.code === code);
+            if (!pop) return;
+
+            document.getElementById('modal-pop-name').innerText = pop.name;
+            document.getElementById('modal-pop-code').innerText = `Mã POP: ${pop.code} | Chi nhánh TQG`;
+            document.getElementById('modal-pop-rate').innerText = `${pop.rate.toFixed(1)}%`;
+            document.getElementById('modal-pop-ports').innerText = `${pop.used.toLocaleString()} / ${pop.total.toLocaleString()}`;
+            document.getElementById('modal-pop-free').innerText = `${pop.free.toLocaleString()} Port`;
+            document.getElementById('modal-pop-incidents').innerText = pop.incidents;
+
+            let evalText = "Trạm hoạt động ổn định, tỉ lệ khai thác đạt mức trung bình.";
+            if (pop.rate >= 60) evalText = "Trạm khai thác hiệu quả tốt, lưu lượng sử dụng cổng ổn định.";
+            else if (pop.rate < 40) evalText = "Tỉ lệ khai thác còn thấp. Cần ưu tiên điều chuyển hạ tầng hoặc tăng cường phát triển thuê bao.";
+
+            document.getElementById('modal-pop-eval').innerText = evalText;
+            document.getElementById('pop-modal').classList.remove('hidden');
+        }
+
+        function closePopModal() {
+            document.getElementById('pop-modal').classList.add('hidden');
+        }
+
+        function exportTableToCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,STT,Ma POP,Tong Port,Port Da Dung,Port Trong,Ti Le Khai Thac (%),Danh Gia\n";
+            currentPopData.forEach((pop, idx) => {
+                csvContent += `${idx + 1},${pop.code},${pop.total},${pop.used},${pop.free},${pop.rate.toFixed(1)}%,${pop.eval}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Bao_Cao_BC_Pop_TQG.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
