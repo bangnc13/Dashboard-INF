@@ -84,7 +84,7 @@ if all_pts:
 else:
     center_lat, center_lng = 22.675, 106.260
 
-# 4. Mã HTML/JS đã SỬA LỖI LỆCH HƯỚNG LA BÀN
+# 4. Mã HTML/JS TÍCH HỢP TÍNH NĂNG XOAY BẢN ĐỒ (LEAFLET.ROTATE)
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -92,8 +92,12 @@ html_code = f"""
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Plugin hỗ trợ xoay bản đồ Leaflet.Rotate -->
+    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    
     <style>
         #map {{ width: 100%; height: 100vh; margin: 0; padding: 0; }}
         body {{ margin: 0; padding: 0; }}
@@ -102,7 +106,7 @@ html_code = f"""
             margin: 8px 12px !important;
         }}
         
-        .gps-button {{
+        .gps-button, .north-button {{
             background-color: #ffffff;
             border: 2px solid rgba(0,0,0,0.2);
             border-radius: 4px;
@@ -114,8 +118,9 @@ html_code = f"""
             font-size: 18px;
             box-shadow: 0 1px 5px rgba(0,0,0,0.4);
             user-select: none;
+            margin-bottom: 5px;
         }}
-        .gps-button:hover {{
+        .gps-button:hover, .north-button:hover {{
             background-color: #f4f4f4;
         }}
         .gps-active {{
@@ -132,7 +137,13 @@ html_code = f"""
 <body>
     <div id="map"></div>
     <script>
-        var map = L.map('map').setView([{center_lat}, {center_lng}], 13);
+        // Khởi tạo bản đồ với tính năng Xoay (rotate: true, touchRotate: true)
+        var map = L.map('map', {{
+            rotate: true,
+            touchRotate: true,
+            rotateControl: false,
+            bearing: 0
+        }}).setView([{center_lat}, {center_lng}], 13);
 
         var googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={{x}}&y={{y}}&z={{z}}', {{
             maxZoom: 20,
@@ -149,9 +160,8 @@ html_code = f"""
         var isTracking = false;
         var currentHeading = 0;
 
-        // Tạo SVG Nón ánh sáng chuẩn Hướng Bắc = 0 độ
+        // Tạo SVG Nón ánh sáng hướng Bắc
         function createHeadingIcon(heading) {{
-            // SVG này đỉnh nón hướng chính Bắc (hướng 12 giờ)
             var svg = '<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">' +
                       '<path d="M30 30 L15 3 A 30 30 0 0 1 45 3 Z" fill="#1a73e8" fill-opacity="0.4" stroke="#1a73e8" stroke-width="0.5"/>' +
                       '<circle cx="30" cy="30" r="7" fill="#1a73e8" stroke="#ffffff" stroke-width="2"/>' +
@@ -164,23 +174,18 @@ html_code = f"""
             }});
         }}
 
-        // Hàm tính toán góc chuẩn La Bàn Từ Trường (Magnetic / True North)
+        // Cảm biến la bàn từ trường
         function handleOrientation(event) {{
             var heading = null;
-
             if (event.webkitCompassHeading) {{
-                // Trình duyệt iOS Safari (Chính xác 100%)
                 heading = event.webkitCompassHeading;
             }} else if (event.absolute === true || event.type === 'deviceorientationabsolute') {{
-                // Trình duyệt Android Chrome hỗ trợ La bàn tuyệt đối
                 heading = 360 - event.alpha;
             }} else if (event.alpha !== null) {{
-                // Khôi phục mặc định nếu máy không có cảm biến từ trường
                 heading = 360 - event.alpha;
             }}
 
             if (heading !== null) {{
-                // Chuẩn hóa góc 0 - 360 độ
                 currentHeading = (heading + 360) % 360;
                 if (userMarker) {{
                     userMarker.setIcon(createHeadingIcon(currentHeading));
@@ -188,23 +193,36 @@ html_code = f"""
             }}
         }}
 
-        var gpsControl = L.control({{position: 'topleft'}});
-        gpsControl.onAdd = function(map) {{
-            var div = L.DomUtil.create('div', 'gps-button');
-            div.innerHTML = '🎯';
-            div.title = 'Bật/Tắt Định vị & Chuẩn hóa La bàn';
+        // --- NÚT ĐIỀU KHIỂN BẢN ĐỒ (GPS & RESET HƯỚNG BẮC) ---
+        var customControls = L.control({{position: 'topleft'}});
+        customControls.onAdd = function(map) {{
+            var container = L.DomUtil.create('div');
             
-            L.DomEvent.disableClickPropagation(div);
-            div.onclick = function() {{
+            // Nút Định vị GPS
+            var gpsBtn = L.DomUtil.create('div', 'gps-button', container);
+            gpsBtn.innerHTML = '🎯';
+            gpsBtn.title = 'Bật/Tắt GPS';
+            L.DomEvent.disableClickPropagation(gpsBtn);
+            gpsBtn.onclick = function() {{
                 if (!isTracking) {{
-                    startGPS(div);
+                    startGPS(gpsBtn);
                 }} else {{
-                    stopGPS(div);
+                    stopGPS(gpsBtn);
                 }}
             }};
-            return div;
+
+            // Nút Reset Hướng Bắc (Đặt góc xoay về 0 độ)
+            var northBtn = L.DomUtil.create('div', 'north-button', container);
+            northBtn.innerHTML = '🧭';
+            northBtn.title = 'Xoay bản đồ lại hướng Bắc';
+            L.DomEvent.disableClickPropagation(northBtn);
+            northBtn.onclick = function() {{
+                map.setBearing(0); // Đưa bản đồ về hướng Bắc mặc định
+            }};
+
+            return container;
         }};
-        gpsControl.addTo(map);
+        customControls.addTo(map);
 
         function startGPS(btnElement) {{
             if (!navigator.geolocation) {{
@@ -212,12 +230,9 @@ html_code = f"""
                 return;
             }}
 
-            // Lắng nghe cảm biến la bàn
             if ('ondeviceorientationabsolute' in window) {{
-                // Android Chrome dùng event Absolute chuẩn hơn
                 window.addEventListener('deviceorientationabsolute', handleOrientation, true);
             }} else if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {{
-                // iOS Safari yêu cầu xin quyền
                 DeviceOrientationEvent.requestPermission()
                     .then(permissionState => {{
                         if (permissionState === 'granted') {{
@@ -238,7 +253,6 @@ html_code = f"""
                     var lng = position.coords.longitude;
                     var accuracy = position.coords.accuracy;
 
-                    // Nếu thiết bị đang di chuyển, ưu tiên lấy góc hướng đi từ chip GPS
                     if (position.coords.heading !== null && !isNaN(position.coords.heading) && position.coords.speed > 0.5) {{
                         currentHeading = position.coords.heading;
                     }}
