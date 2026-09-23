@@ -88,7 +88,7 @@ if all_pts:
 else:
     center_lat, center_lng = 22.675, 106.260
 
-# 4. Mã HTML/JavaScript Leaflet + GPS Realtime + Google Maps & Street View
+# 4. Mã HTML/JavaScript Leaflet + GPS Realtime + Compass Heading + Google Maps
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -127,6 +127,12 @@ html_code = f"""
             background-color: #e6f2ff !important;
             border-color: #1a73e8 !important;
         }}
+
+        /* Style cho Icon Mũi tên định hướng xoay theo con quay hồi chuyển */
+        .user-heading-icon {{
+            transition: transform 0.15s ease-out;
+            transform-origin: center center;
+        }}
     </style>
 </head>
 <body>
@@ -144,18 +150,52 @@ html_code = f"""
             maxZoom: 20
         }});
 
-        // --- CẤU HÌNH TÍNH NĂNG GPS REALTIME ---
+        // --- CẤU HÌNH TÍNH NĂNG GPS & CON QUAY HỒI CHUYỂN (COMPASS) ---
         var userMarker = null;
         var userAccuracyCircle = null;
         var watchId = null;
         var isTracking = false;
+        var currentHeading = 0;
 
-        // Tạo nút điều khiển GPS trên góc bản đồ
+        // Tạo SVG Mũi tên chỉ hướng dạng nón ánh sáng
+        function createHeadingIcon(heading) {{
+            var svg = '<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">' +
+                      // Nón ánh sáng quét hướng
+                      '<path d="M30 30 L12 2 A30 30 0 0 1 48 2 Z" fill="#1a73e8" fill-opacity="0.35"/>' +
+                      // Chấm vị trí trung tâm
+                      '<circle cx="30" cy="30" r="8" fill="#1a73e8" stroke="#ffffff" stroke-width="2.5"/>' +
+                      '</svg>';
+            return L.divIcon({{
+                html: '<div class="user-heading-icon" style="transform: rotate(' + heading + 'deg);">' + svg + '</div>',
+                className: '',
+                iconSize: [60, 60],
+                iconAnchor: [30, 30]
+            }});
+        }}
+
+        // Lắng nghe sự kiện xoay thiết bị (Orientation)
+        function handleOrientation(event) {{
+            var heading = null;
+            if (event.webkitCompassHeading) {{
+                // Dành riêng cho iOS Safari
+                heading = event.webkitCompassHeading;
+            }} else if (event.alpha !== null) {{
+                // Dành cho Android Chrome
+                heading = 360 - event.alpha;
+            }}
+
+            if (heading !== null && userMarker) {{
+                currentHeading = Math.round(heading);
+                userMarker.setIcon(createHeadingIcon(currentHeading));
+            }}
+        }}
+
+        // Nút điều khiển GPS trên góc bản đồ
         var gpsControl = L.control({{position: 'topleft'}});
         gpsControl.onAdd = function(map) {{
             var div = L.DomUtil.create('div', 'gps-button');
             div.innerHTML = '🎯';
-            div.title = 'Bật/Tắt Định vị GPS Realtime';
+            div.title = 'Bật/Tắt Định vị GPS & Con quay hồi chuyển';
             
             L.DomEvent.disableClickPropagation(div);
             div.onclick = function() {{
@@ -171,53 +211,65 @@ html_code = f"""
 
         function startGPS(btnElement) {{
             if (!navigator.geolocation) {{
-                alert("Thiết bị hoặc trình duyệt của bạn không hỗ trợ định vị GPS.");
+                alert("Thiết bị không hỗ trợ GPS.");
                 return;
+            }}
+
+            // Yêu cầu quyền truy cập con quay hồi chuyển trên iOS 13+
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {{
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {{
+                        if (permissionState === 'granted') {{
+                            window.addEventListener('deviceorientation', handleOrientation, true);
+                        }}
+                    }})
+                    .catch(console.error);
+            }} else {{
+                window.addEventListener('deviceorientation', handleOrientation, true);
             }}
 
             btnElement.classList.add('gps-active');
             isTracking = true;
 
-            // Đăng ký theo dõi vị trí GPS thời gian thực (WatchPosition)
+            // Đăng ký định vị GPS thời gian thực
             watchId = navigator.geolocation.watchPosition(
                 function(position) {{
                     var lat = position.coords.latitude;
                     var lng = position.coords.longitude;
                     var accuracy = position.coords.accuracy;
 
-                    // Nếu đã có marker vị trí cũ thì cập nhật tọa độ
+                    // Nếu thiết bị tự cung cấp hướng di chuyển (heading) từ chip GPS
+                    if (position.coords.heading !== null && !isNaN(position.coords.heading)) {{
+                        currentHeading = position.coords.heading;
+                    }}
+
                     if (userMarker) {{
                         userMarker.setLatLng([lat, lng]);
+                        userMarker.setIcon(createHeadingIcon(currentHeading));
                         userAccuracyCircle.setLatLng([lat, lng]);
                         userAccuracyCircle.setRadius(accuracy);
                     }} else {{
-                        // Tạo marker GPS mới (chấm đỏ tâm trắng phát sáng)
-                        userMarker = L.circleMarker([lat, lng], {{
-                            radius: 8,
-                            color: '#ffffff',
-                            weight: 3,
-                            fillColor: '#0078ff',
-                            fillOpacity: 1
-                        }}).addTo(map).bindPopup("<b>📍 Vị trí hiện tại của bạn</b><br>Độ chính xác: ±" + Math.round(accuracy) + "m");
+                        userMarker = L.marker([lat, lng], {{
+                            icon: createHeadingIcon(currentHeading)
+                        }}).addTo(map).bindPopup("<b>📍 Vị trí của bạn</b><br>Độ chính xác: ±" + Math.round(accuracy) + "m");
 
                         userAccuracyCircle = L.circle([lat, lng], {{
                             radius: accuracy,
                             color: '#1a73e8',
                             weight: 1,
                             fillColor: '#1a73e8',
-                            fillOpacity: 0.15
+                            fillOpacity: 0.12
                         }}).addTo(map);
 
-                        // Di chuyển tâm bản đồ đến vị trí hiện tại khi bật GPS lần đầu
-                        map.setView([lat, lng], 16);
+                        map.setView([lat, lng], 17);
                     }}
                 }},
                 function(error) {{
-                    alert("Không thể lấy vị trí GPS: " + error.message + ". Vui lòng bật Quyền vị trí trên điện thoại.");
+                    alert("Không thể lấy vị trí GPS: " + error.message);
                     stopGPS(btnElement);
                 }},
                 {{
-                    enableHighAccuracy: true, // Ưu tiên độ chính xác cao bằng chip GPS
+                    enableHighAccuracy: true,
                     maximumAge: 0,
                     timeout: 10000
                 }}
@@ -229,6 +281,8 @@ html_code = f"""
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }}
+            window.removeEventListener('deviceorientation', handleOrientation, true);
+            
             if (userMarker) {{
                 map.removeLayer(userMarker);
                 map.removeLayer(userAccuracyCircle);
@@ -239,7 +293,7 @@ html_code = f"""
             isTracking = false;
         }}
 
-        // --- CÁC LỚP BẢN ĐỒ KML & STREET VIEW ---
+        // --- BẢN ĐỒ KML & STREET VIEW ---
         function getInlineStreetView(lat, lng, title) {{
             var iframeUrl = "https://maps.google.com/maps?q=&layer=c&cbll=" + lat + "," + lng + "&cbp=12,0,0,0,0&panoid=&ie=UTF8&output=svembed";
             return "<div style='font-family: sans-serif;'>" +
@@ -294,7 +348,7 @@ html_code = f"""
             }}).bindPopup(getInlineStreetView(pt[0], pt[1], "🏭 Trạm biến áp"), {{maxWidth: 340}}).addTo(map);
         }});
 
-        // Bảng điều khiển lớp
+        // Controls
         var baseMaps = {{
             "Vệ tinh Google": googleHybrid,
             "Giao thông Google": googleRoads
