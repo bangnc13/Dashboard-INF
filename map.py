@@ -36,7 +36,7 @@ def parse_kml_from_path(file_path):
             p = p_str.strip().split(',')
             if len(p) >= 2:
                 try:
-                    points.append([float(p[1]), float(p[0])])
+                    points.append([float(p[1]), float(p[0])]) # [lat, lng]
                 except ValueError:
                     continue
 
@@ -57,7 +57,7 @@ def parse_kml_from_path(file_path):
         st.error(f"Lỗi đọc file {file_path}: {e}")
     return points, lines
 
-# 3. Tìm & gộp các file KML
+# 3. Tự động tìm & gộp các file KML trong thư mục
 cot_pts = []
 day_lines = []
 tram_pts = []
@@ -84,7 +84,7 @@ if all_pts:
 else:
     center_lat, center_lng = 22.675, 106.260
 
-# 4. Mã HTML/JS TỐI ƯU HIỆU NĂNG - KHÔNG ĐỘ TRỄ
+# 4. Mã HTML/JS đã SỬA LỖI LỆCH HƯỚNG LA BÀN
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -92,11 +92,8 @@ html_code = f"""
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    
     <style>
         #map {{ width: 100%; height: 100vh; margin: 0; padding: 0; }}
         body {{ margin: 0; padding: 0; }}
@@ -105,7 +102,7 @@ html_code = f"""
             margin: 8px 12px !important;
         }}
         
-        .gps-button, .north-button {{
+        .gps-button {{
             background-color: #ffffff;
             border: 2px solid rgba(0,0,0,0.2);
             border-radius: 4px;
@@ -117,9 +114,8 @@ html_code = f"""
             font-size: 18px;
             box-shadow: 0 1px 5px rgba(0,0,0,0.4);
             user-select: none;
-            margin-bottom: 5px;
         }}
-        .gps-button:hover, .north-button:hover {{
+        .gps-button:hover {{
             background-color: #f4f4f4;
         }}
         .gps-active {{
@@ -127,22 +123,16 @@ html_code = f"""
             border-color: #1a73e8 !important;
         }}
 
-        /* Bỏ transition để xoay siêu tốc không trễ độ phân giải */
         .user-heading-icon {{
+            transition: transform 0.1s linear;
             transform-origin: 30px 30px;
-            will-change: transform;
         }}
     </style>
 </head>
 <body>
     <div id="map"></div>
     <script>
-        var map = L.map('map', {{
-            rotate: true,
-            touchRotate: true,
-            rotateControl: false,
-            bearing: 0
-        }}).setView([{center_lat}, {center_lng}], 13);
+        var map = L.map('map').setView([{center_lat}, {center_lng}], 13);
 
         var googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={{x}}&y={{y}}&z={{z}}', {{
             maxZoom: 20,
@@ -157,96 +147,64 @@ html_code = f"""
         var userAccuracyCircle = null;
         var watchId = null;
         var isTracking = false;
-        
-        // Các biến tối ưu hóa tần số xoay (Frame Loop)
-        var rawHeading = 0;
-        var smoothedHeading = 0;
-        var isRendering = false;
+        var currentHeading = 0;
 
-        function createHeadingIcon() {{
+        // Tạo SVG Nón ánh sáng chuẩn Hướng Bắc = 0 độ
+        function createHeadingIcon(heading) {{
+            // SVG này đỉnh nón hướng chính Bắc (hướng 12 giờ)
             var svg = '<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">' +
-                      '<path d="M30 30 L15 3 A 30 30 0 0 1 45 3 Z" fill="#1a73e8" fill-opacity="0.45" stroke="#1a73e8" stroke-width="0.5"/>' +
+                      '<path d="M30 30 L15 3 A 30 30 0 0 1 45 3 Z" fill="#1a73e8" fill-opacity="0.4" stroke="#1a73e8" stroke-width="0.5"/>' +
                       '<circle cx="30" cy="30" r="7" fill="#1a73e8" stroke="#ffffff" stroke-width="2"/>' +
                       '</svg>';
             return L.divIcon({{
-                html: '<div id="headingIconElem" class="user-heading-icon">' + svg + '</div>',
+                html: '<div class="user-heading-icon" style="transform: rotate(' + heading + 'deg);">' + svg + '</div>',
                 className: '',
                 iconSize: [60, 60],
                 iconAnchor: [30, 30]
             }});
         }}
 
-        // Vòng lặp render đồng bộ với tần số quét màn hình (60Hz / 120Hz)
-        function updateRotationLoop() {{
-            if (!isTracking) {{
-                isRendering = false;
-                return;
-            }}
-
-            // Thuật toán làm mượt chống giật rung (Low-pass filter)
-            var diff = rawHeading - smoothedHeading;
-            if (diff < -180) diff += 360;
-            if (diff > 180) diff -= 360;
-            
-            // Hệ số 0.35 giúp xoay phản hồi tức thì nhưng vẫn mượt
-            smoothedHeading += diff * 0.35;
-            if (smoothedHeading < 0) smoothedHeading += 360;
-            if (smoothedHeading >= 360) smoothedHeading -= 360;
-
-            // Đổi vị trí trực tiếp bằng DOM style biến đổi (Nhanh gấp 10 lần gán lại Icon)
-            var iconElem = document.getElementById('headingIconElem');
-            if (iconElem) {{
-                iconElem.style.transform = 'rotate(' + smoothedHeading + 'deg)';
-            }}
-
-            requestAnimationFrame(updateRotationLoop);
-        }}
-
-        // Lắng nghe cảm biến la bàn
+        // Hàm tính toán góc chuẩn La Bàn Từ Trường (Magnetic / True North)
         function handleOrientation(event) {{
             var heading = null;
+
             if (event.webkitCompassHeading) {{
+                // Trình duyệt iOS Safari (Chính xác 100%)
                 heading = event.webkitCompassHeading;
             }} else if (event.absolute === true || event.type === 'deviceorientationabsolute') {{
+                // Trình duyệt Android Chrome hỗ trợ La bàn tuyệt đối
                 heading = 360 - event.alpha;
             }} else if (event.alpha !== null) {{
+                // Khôi phục mặc định nếu máy không có cảm biến từ trường
                 heading = 360 - event.alpha;
             }}
 
             if (heading !== null) {{
-                rawHeading = (heading + 360) % 360;
-                if (!isRendering) {{
-                    isRendering = true;
-                    requestAnimationFrame(updateRotationLoop);
+                // Chuẩn hóa góc 0 - 360 độ
+                currentHeading = (heading + 360) % 360;
+                if (userMarker) {{
+                    userMarker.setIcon(createHeadingIcon(currentHeading));
                 }}
             }}
         }}
 
-        // Controls
-        var customControls = L.control({{position: 'topleft'}});
-        customControls.onAdd = function(map) {{
-            var container = L.DomUtil.create('div');
+        var gpsControl = L.control({{position: 'topleft'}});
+        gpsControl.onAdd = function(map) {{
+            var div = L.DomUtil.create('div', 'gps-button');
+            div.innerHTML = '🎯';
+            div.title = 'Bật/Tắt Định vị & Chuẩn hóa La bàn';
             
-            var gpsBtn = L.DomUtil.create('div', 'gps-button', container);
-            gpsBtn.innerHTML = '🎯';
-            gpsBtn.title = 'Bật/Tắt GPS';
-            L.DomEvent.disableClickPropagation(gpsBtn);
-            gpsBtn.onclick = function() {{
-                if (!isTracking) startGPS(gpsBtn);
-                else stopGPS(gpsBtn);
+            L.DomEvent.disableClickPropagation(div);
+            div.onclick = function() {{
+                if (!isTracking) {{
+                    startGPS(div);
+                }} else {{
+                    stopGPS(div);
+                }}
             }};
-
-            var northBtn = L.DomUtil.create('div', 'north-button', container);
-            northBtn.innerHTML = '🧭';
-            northBtn.title = 'Xoay bản đồ lại hướng Bắc';
-            L.DomEvent.disableClickPropagation(northBtn);
-            northBtn.onclick = function() {{
-                map.setBearing(0);
-            }};
-
-            return container;
+            return div;
         }};
-        customControls.addTo(map);
+        gpsControl.addTo(map);
 
         function startGPS(btnElement) {{
             if (!navigator.geolocation) {{
@@ -254,9 +212,12 @@ html_code = f"""
                 return;
             }}
 
+            // Lắng nghe cảm biến la bàn
             if ('ondeviceorientationabsolute' in window) {{
+                // Android Chrome dùng event Absolute chuẩn hơn
                 window.addEventListener('deviceorientationabsolute', handleOrientation, true);
             }} else if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {{
+                // iOS Safari yêu cầu xin quyền
                 DeviceOrientationEvent.requestPermission()
                     .then(permissionState => {{
                         if (permissionState === 'granted') {{
@@ -277,13 +238,19 @@ html_code = f"""
                     var lng = position.coords.longitude;
                     var accuracy = position.coords.accuracy;
 
+                    // Nếu thiết bị đang di chuyển, ưu tiên lấy góc hướng đi từ chip GPS
+                    if (position.coords.heading !== null && !isNaN(position.coords.heading) && position.coords.speed > 0.5) {{
+                        currentHeading = position.coords.heading;
+                    }}
+
                     if (userMarker) {{
                         userMarker.setLatLng([lat, lng]);
+                        userMarker.setIcon(createHeadingIcon(currentHeading));
                         userAccuracyCircle.setLatLng([lat, lng]);
                         userAccuracyCircle.setRadius(accuracy);
                     }} else {{
                         userMarker = L.marker([lat, lng], {{
-                            icon: createHeadingIcon()
+                            icon: createHeadingIcon(currentHeading)
                         }}).addTo(map).bindPopup("<b>📍 Vị trí hiện tại</b><br>Độ chính xác: ±" + Math.round(accuracy) + "m");
 
                         userAccuracyCircle = L.circle([lat, lng], {{
@@ -325,7 +292,6 @@ html_code = f"""
             }}
             btnElement.classList.remove('gps-active');
             isTracking = false;
-            isRendering = false;
         }}
 
         // --- BẢN ĐỒ KML & STREET VIEW ---
