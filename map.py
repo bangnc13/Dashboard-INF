@@ -23,7 +23,6 @@ st.markdown("""
 # 2. Hàm đọc file KML từ đường dẫn tệp
 @st.cache_data
 def parse_kml_from_path(file_path):
-    """Trích xuất tọa độ point và linestring trực tiếp từ file trên ổ đĩa"""
     points = []
     lines = []
     if not os.path.exists(file_path):
@@ -32,7 +31,6 @@ def parse_kml_from_path(file_path):
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
         
-        # Bóc tách tất cả các điểm Point (Cột / Trạm)
         raw_pts = re.findall(r'<Point>.*?<coordinates>\s*([^\s<]+)', content, re.DOTALL)
         for p_str in raw_pts:
             p = p_str.strip().split(',')
@@ -42,7 +40,6 @@ def parse_kml_from_path(file_path):
                 except ValueError:
                     continue
 
-        # Bóc tách tất cả các tuyến LineString (Đường dây)
         raw_lines = re.findall(r'<LineString>.*?<coordinates>\s*(.*?)\s*</coordinates>', content, re.DOTALL)
         for l_str in raw_lines:
             path = []
@@ -80,7 +77,6 @@ for f_path in set(tram_files):
     pts, _ = parse_kml_from_path(f_path)
     tram_pts.extend(pts)
 
-# Tính toán vị trí trung tâm mặc định
 all_pts = cot_pts + tram_pts
 if all_pts:
     center_lat = sum(p[0] for p in all_pts) / len(all_pts)
@@ -88,7 +84,7 @@ if all_pts:
 else:
     center_lat, center_lng = 22.675, 106.260
 
-# 4. Mã HTML/JavaScript Leaflet + GPS Realtime + Compass Heading + Google Maps
+# 4. Mã HTML/JS đã SỬA LỖI LỆCH HƯỚNG LA BÀN
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -106,7 +102,6 @@ html_code = f"""
             margin: 8px 12px !important;
         }}
         
-        /* Custom Nút bấm GPS */
         .gps-button {{
             background-color: #ffffff;
             border: 2px solid rgba(0,0,0,0.2);
@@ -128,10 +123,9 @@ html_code = f"""
             border-color: #1a73e8 !important;
         }}
 
-        /* Style cho Icon Mũi tên định hướng xoay theo con quay hồi chuyển */
         .user-heading-icon {{
-            transition: transform 0.15s ease-out;
-            transform-origin: center center;
+            transition: transform 0.1s linear;
+            transform-origin: 30px 30px;
         }}
     </style>
 </head>
@@ -140,7 +134,6 @@ html_code = f"""
     <script>
         var map = L.map('map').setView([{center_lat}, {center_lng}], 13);
 
-        // Lớp bản đồ Google Vệ tinh
         var googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={{x}}&y={{y}}&z={{z}}', {{
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
@@ -150,20 +143,18 @@ html_code = f"""
             maxZoom: 20
         }});
 
-        // --- CẤU HÌNH TÍNH NĂNG GPS & CON QUAY HỒI CHUYỂN (COMPASS) ---
         var userMarker = null;
         var userAccuracyCircle = null;
         var watchId = null;
         var isTracking = false;
         var currentHeading = 0;
 
-        // Tạo SVG Mũi tên chỉ hướng dạng nón ánh sáng
+        // Tạo SVG Nón ánh sáng chuẩn Hướng Bắc = 0 độ
         function createHeadingIcon(heading) {{
+            // SVG này đỉnh nón hướng chính Bắc (hướng 12 giờ)
             var svg = '<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">' +
-                      // Nón ánh sáng quét hướng
-                      '<path d="M30 30 L12 2 A30 30 0 0 1 48 2 Z" fill="#1a73e8" fill-opacity="0.35"/>' +
-                      // Chấm vị trí trung tâm
-                      '<circle cx="30" cy="30" r="8" fill="#1a73e8" stroke="#ffffff" stroke-width="2.5"/>' +
+                      '<path d="M30 30 L15 3 A 30 30 0 0 1 45 3 Z" fill="#1a73e8" fill-opacity="0.4" stroke="#1a73e8" stroke-width="0.5"/>' +
+                      '<circle cx="30" cy="30" r="7" fill="#1a73e8" stroke="#ffffff" stroke-width="2"/>' +
                       '</svg>';
             return L.divIcon({{
                 html: '<div class="user-heading-icon" style="transform: rotate(' + heading + 'deg);">' + svg + '</div>',
@@ -173,29 +164,35 @@ html_code = f"""
             }});
         }}
 
-        // Lắng nghe sự kiện xoay thiết bị (Orientation)
+        // Hàm tính toán góc chuẩn La Bàn Từ Trường (Magnetic / True North)
         function handleOrientation(event) {{
             var heading = null;
+
             if (event.webkitCompassHeading) {{
-                // Dành riêng cho iOS Safari
+                // Trình duyệt iOS Safari (Chính xác 100%)
                 heading = event.webkitCompassHeading;
+            }} else if (event.absolute === true || event.type === 'deviceorientationabsolute') {{
+                // Trình duyệt Android Chrome hỗ trợ La bàn tuyệt đối
+                heading = 360 - event.alpha;
             }} else if (event.alpha !== null) {{
-                // Dành cho Android Chrome
+                // Khôi phục mặc định nếu máy không có cảm biến từ trường
                 heading = 360 - event.alpha;
             }}
 
-            if (heading !== null && userMarker) {{
-                currentHeading = Math.round(heading);
-                userMarker.setIcon(createHeadingIcon(currentHeading));
+            if (heading !== null) {{
+                // Chuẩn hóa góc 0 - 360 độ
+                currentHeading = (heading + 360) % 360;
+                if (userMarker) {{
+                    userMarker.setIcon(createHeadingIcon(currentHeading));
+                }}
             }}
         }}
 
-        // Nút điều khiển GPS trên góc bản đồ
         var gpsControl = L.control({{position: 'topleft'}});
         gpsControl.onAdd = function(map) {{
             var div = L.DomUtil.create('div', 'gps-button');
             div.innerHTML = '🎯';
-            div.title = 'Bật/Tắt Định vị GPS & Con quay hồi chuyển';
+            div.title = 'Bật/Tắt Định vị & Chuẩn hóa La bàn';
             
             L.DomEvent.disableClickPropagation(div);
             div.onclick = function() {{
@@ -215,8 +212,12 @@ html_code = f"""
                 return;
             }}
 
-            // Yêu cầu quyền truy cập con quay hồi chuyển trên iOS 13+
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {{
+            // Lắng nghe cảm biến la bàn
+            if ('ondeviceorientationabsolute' in window) {{
+                // Android Chrome dùng event Absolute chuẩn hơn
+                window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+            }} else if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {{
+                // iOS Safari yêu cầu xin quyền
                 DeviceOrientationEvent.requestPermission()
                     .then(permissionState => {{
                         if (permissionState === 'granted') {{
@@ -231,15 +232,14 @@ html_code = f"""
             btnElement.classList.add('gps-active');
             isTracking = true;
 
-            // Đăng ký định vị GPS thời gian thực
             watchId = navigator.geolocation.watchPosition(
                 function(position) {{
                     var lat = position.coords.latitude;
                     var lng = position.coords.longitude;
                     var accuracy = position.coords.accuracy;
 
-                    // Nếu thiết bị tự cung cấp hướng di chuyển (heading) từ chip GPS
-                    if (position.coords.heading !== null && !isNaN(position.coords.heading)) {{
+                    // Nếu thiết bị đang di chuyển, ưu tiên lấy góc hướng đi từ chip GPS
+                    if (position.coords.heading !== null && !isNaN(position.coords.heading) && position.coords.speed > 0.5) {{
                         currentHeading = position.coords.heading;
                     }}
 
@@ -251,7 +251,7 @@ html_code = f"""
                     }} else {{
                         userMarker = L.marker([lat, lng], {{
                             icon: createHeadingIcon(currentHeading)
-                        }}).addTo(map).bindPopup("<b>📍 Vị trí của bạn</b><br>Độ chính xác: ±" + Math.round(accuracy) + "m");
+                        }}).addTo(map).bindPopup("<b>📍 Vị trí hiện tại</b><br>Độ chính xác: ±" + Math.round(accuracy) + "m");
 
                         userAccuracyCircle = L.circle([lat, lng], {{
                             radius: accuracy,
@@ -265,7 +265,7 @@ html_code = f"""
                     }}
                 }},
                 function(error) {{
-                    alert("Không thể lấy vị trí GPS: " + error.message);
+                    alert("Lỗi GPS: " + error.message);
                     stopGPS(btnElement);
                 }},
                 {{
@@ -281,6 +281,7 @@ html_code = f"""
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }}
+            window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
             window.removeEventListener('deviceorientation', handleOrientation, true);
             
             if (userMarker) {{
@@ -318,7 +319,7 @@ html_code = f"""
             L.polyline(path, {{color: '#ff3333', weight: 3, opacity: 0.9}}).addTo(map);
         }});
 
-        // 2. Cột điện (Cluster)
+        // 2. Cột điện
         var cotData = {json.dumps(cot_pts)};
         var cotMarkers = L.markerClusterGroup({{
             chunkedLoading: true,
@@ -348,7 +349,6 @@ html_code = f"""
             }}).bindPopup(getInlineStreetView(pt[0], pt[1], "🏭 Trạm biến áp"), {{maxWidth: 340}}).addTo(map);
         }});
 
-        // Controls
         var baseMaps = {{
             "Vệ tinh Google": googleHybrid,
             "Giao thông Google": googleRoads
@@ -359,5 +359,4 @@ html_code = f"""
 </html>
 """
 
-# 5. Đẩy bản đồ ra ứng dụng
 st.components.v1.html(html_code, height=950)
