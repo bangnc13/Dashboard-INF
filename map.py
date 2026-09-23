@@ -1,33 +1,36 @@
 import streamlit as st
 import re
 import json
+import os
+import glob
 
 # 1. Cấu hình trang Streamlit
 st.set_page_config(
     page_title="Hệ thống GIS Lưới Điện", 
     layout="wide", 
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Tối ưu CSS giao diện tràn màn hình
+# Tối ưu CSS giao diện tràn toàn bộ màn hình
 st.markdown("""
     <style>
         .block-container { padding: 0rem !important; max-width: 100% !important; }
         header, footer { visibility: hidden; }
-        iframe { width: 100% !important; height: 95vh !important; border: none !important; }
+        iframe { width: 100% !important; height: 100vh !important; border: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Hàm xử lý đọc file KML dung lượng lớn bằng Regex
+# 2. Hàm đọc file KML từ đường dẫn tệp
 @st.cache_data
-def parse_all_kml(file_bytes):
-    """Trích xuất 100% tọa độ điểm (Point) và đường (LineString) từ dữ liệu KML"""
+def parse_kml_from_path(file_path):
+    """Trích xuất tọa độ point và linestring trực tiếp từ file trên ổ đĩa"""
     points = []
     lines = []
-    if not file_bytes:
+    if not os.path.exists(file_path):
         return points, lines
     try:
-        content = file_bytes.decode('utf-8', errors='ignore')
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
         
         # Bóc tách tất cả các điểm Point (Cột / Trạm)
         raw_pts = re.findall(r'<Point>.*?<coordinates>\s*([^\s<]+)', content, re.DOTALL)
@@ -35,7 +38,7 @@ def parse_all_kml(file_bytes):
             p = p_str.strip().split(',')
             if len(p) >= 2:
                 try:
-                    points.append([float(p[1]), float(p[0])]) # Lưu dạng [lat, lng]
+                    points.append([float(p[1]), float(p[0])]) # [lat, lng]
                 except ValueError:
                     continue
 
@@ -54,38 +57,33 @@ def parse_all_kml(file_bytes):
                 lines.append(path)
 
     except Exception as e:
-        st.error(f"Lỗi đọc dữ liệu KML: {e}")
+        st.error(f"Lỗi đọc file {file_path}: {e}")
     return points, lines
 
-# 3. Thanh điều hướng Sidebar
-with st.sidebar:
-    st.title("⚡ Quản lý Lưới điện GIS")
-    st.markdown("---")
-    # Tải nhiều file Cột điện cùng lúc (cot_dien_1, cot_dien_2,...)
-    files_cot = st.file_uploader(
-        "1. File Cột điện (.kml)", 
-        type=['kml'], 
-        accept_multiple_files=True,
-        help="Giữ Ctrl hoặc dùng chuột quét chọn cùng lúc các file cot_dien_1, cot_dien_2,..."
-    )
-    file_day = st.file_uploader("2. File Đường dây (.kml)", type=['kml'])
-    file_tram = st.file_uploader("3. File Trạm biến áp (.kml)", type=['kml'])
-
-# 4. Xử lý & Gộp dữ liệu tải lên
+# 3. Tự động tìm & gộp các file KML trong thư mục hiện tại
 cot_pts = []
-if files_cot:
-    for f in files_cot:
-        pts, _ = parse_all_kml(f.read())
-        cot_pts.extend(pts)
+day_lines = []
+tram_pts = []
 
-_, day_lines = parse_all_kml(file_day.read()) if file_day else ([], [])
-tram_pts, _ = parse_all_kml(file_tram.read()) if file_tram else ([], [])
+# Tìm tất cả các file cột điện (cot_dien.kml hoặc cot_dien_1.kml, cot_dien_2.kml,...)
+cot_files = sorted(glob.glob("cot_dien*.kml"))
+for f_path in cot_files:
+    pts, _ = parse_kml_from_path(f_path)
+    cot_pts.extend(pts)
 
-# Hiển thị thông số đếm dữ liệu
-if cot_pts or day_lines or tram_pts:
-    st.sidebar.success(f"Đã nạp: {len(cot_pts):,} Cột | {len(day_lines):,} Tuyến | {len(tram_pts):,} Trạm")
+# Tìm file đường dây
+day_files = glob.glob("*day*.kml") + glob.glob("duong_day*.kml")
+for f_path in set(day_files):
+    _, lines = parse_kml_from_path(f_path)
+    day_lines.extend(lines)
 
-# Tính toán vị trí trung tâm tự động
+# Tìm file trạm biến áp
+tram_files = glob.glob("*tram*.kml") + glob.glob("tram_bien_ap*.kml")
+for f_path in set(tram_files):
+    pts, _ = parse_kml_from_path(f_path)
+    tram_pts.extend(pts)
+
+# Tính toán vị trí trung tâm bản đồ
 all_pts = cot_pts + tram_pts
 if all_pts:
     center_lat = sum(p[0] for p in all_pts) / len(all_pts)
@@ -93,7 +91,7 @@ if all_pts:
 else:
     center_lat, center_lng = 22.675, 106.260
 
-# 5. Mã HTML/JavaScript vẽ bản đồ Leaflet + Street View
+# 4. Mã HTML/JavaScript Leaflet + Google Maps & Street View 360°
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -115,10 +113,9 @@ html_code = f"""
 <body>
     <div id="map"></div>
     <script>
-        // Khởi tạo bản đồ
         var map = L.map('map').setView([{center_lat}, {center_lng}], 13);
 
-        // Nguồn ảnh bản đồ Google Maps (Lớp Vệ tinh Hybrid & Giao thông)
+        // Nguồn bản đồ Vệ tinh Google Hybrid
         var googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={{x}}&y={{y}}&z={{z}}', {{
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
@@ -128,7 +125,7 @@ html_code = f"""
             maxZoom: 20
         }});
 
-        // Hàm tạo cửa sổ nhúng Street View trực tiếp 360 độ
+        // Cửa sổ xem phố Google Street View trực tiếp
         function getInlineStreetView(lat, lng, title) {{
             var iframeUrl = "https://maps.google.com/maps?q=&layer=c&cbll=" + lat + "," + lng + "&cbp=12,0,0,0,0&panoid=&ie=UTF8&output=svembed";
             return "<div style='font-family: sans-serif;'>" +
@@ -138,7 +135,7 @@ html_code = f"""
                    "</div>";
         }}
 
-        // Sự kiện click bất kỳ trên bản đồ để xem phố
+        // Click bất kỳ vị trí nào để xem Street View
         map.on('click', function(e) {{
             var lat = e.latlng.lat;
             var lng = e.latlng.lng;
@@ -148,13 +145,13 @@ html_code = f"""
                 .openOn(map);
         }});
 
-        // 1. Hiển thị Lớp Đường dây
+        // 1. Vẽ Đường dây (Nét đỏ)
         var linesData = {json.dumps(day_lines)};
         linesData.forEach(function(path) {{
             L.polyline(path, {{color: '#ff3333', weight: 3, opacity: 0.9}}).addTo(map);
         }});
 
-        // 2. Gom nhóm & Vẽ 100% Cột điện (Gộp từ tất cả các file)
+        // 2. Gom nhóm & Vẽ tất cả Cột điện (Chấm xanh)
         var cotData = {json.dumps(cot_pts)};
         var cotMarkers = L.markerClusterGroup({{
             chunkedLoading: true,
@@ -172,7 +169,7 @@ html_code = f"""
         }});
         map.addLayer(cotMarkers);
 
-        // 3. Hiển thị Lớp Trạm biến áp
+        // 3. Vẽ Trạm biến áp (Chấm cam)
         var tramData = {json.dumps(tram_pts)};
         tramData.forEach(function(pt) {{
             L.circleMarker(pt, {{
@@ -184,7 +181,7 @@ html_code = f"""
             }}).bindPopup(getInlineStreetView(pt[0], pt[1], "🏭 Trạm biến áp"), {{maxWidth: 340}}).addTo(map);
         }});
 
-        // Bảng chuyển đổi nền bản đồ
+        // Bảng chọn lớp bản đồ
         var baseMaps = {{
             "Vệ tinh Google": googleHybrid,
             "Giao thông Google": googleRoads
@@ -195,5 +192,5 @@ html_code = f"""
 </html>
 """
 
-# 6. Hiển thị lên giao diện Streamlit
-st.components.v1.html(html_code, height=900)
+# 5. Đẩy bản đồ ra ứng dụng
+st.components.v1.html(html_code, height=950)
