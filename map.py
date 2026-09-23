@@ -60,30 +60,27 @@ def parse_kml_from_path(file_path):
         st.error(f"Lỗi đọc file {file_path}: {e}")
     return points, lines
 
-# 3. Tự động tìm & gộp các file KML trong thư mục hiện tại
+# 3. Tự động tìm & gộp các file KML trong thư mục
 cot_pts = []
 day_lines = []
 tram_pts = []
 
-# Tìm tất cả các file cột điện (cot_dien.kml hoặc cot_dien_1.kml, cot_dien_2.kml,...)
 cot_files = sorted(glob.glob("cot_dien*.kml"))
 for f_path in cot_files:
     pts, _ = parse_kml_from_path(f_path)
     cot_pts.extend(pts)
 
-# Tìm file đường dây
 day_files = glob.glob("*day*.kml") + glob.glob("duong_day*.kml")
 for f_path in set(day_files):
     _, lines = parse_kml_from_path(f_path)
     day_lines.extend(lines)
 
-# Tìm file trạm biến áp
 tram_files = glob.glob("*tram*.kml") + glob.glob("tram_bien_ap*.kml")
 for f_path in set(tram_files):
     pts, _ = parse_kml_from_path(f_path)
     tram_pts.extend(pts)
 
-# Tính toán vị trí trung tâm bản đồ
+# Tính toán vị trí trung tâm mặc định
 all_pts = cot_pts + tram_pts
 if all_pts:
     center_lat = sum(p[0] for p in all_pts) / len(all_pts)
@@ -91,7 +88,7 @@ if all_pts:
 else:
     center_lat, center_lng = 22.675, 106.260
 
-# 4. Mã HTML/JavaScript Leaflet + Google Maps & Street View 360°
+# 4. Mã HTML/JavaScript Leaflet + GPS Realtime + Google Maps & Street View
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -108,6 +105,28 @@ html_code = f"""
             width: 310px !important;
             margin: 8px 12px !important;
         }}
+        
+        /* Custom Nút bấm GPS */
+        .gps-button {{
+            background-color: #ffffff;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            width: 34px;
+            height: 34px;
+            line-height: 30px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 18px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+            user-select: none;
+        }}
+        .gps-button:hover {{
+            background-color: #f4f4f4;
+        }}
+        .gps-active {{
+            background-color: #e6f2ff !important;
+            border-color: #1a73e8 !important;
+        }}
     </style>
 </head>
 <body>
@@ -115,7 +134,7 @@ html_code = f"""
     <script>
         var map = L.map('map').setView([{center_lat}, {center_lng}], 13);
 
-        // Nguồn bản đồ Vệ tinh Google Hybrid
+        // Lớp bản đồ Google Vệ tinh
         var googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={{x}}&y={{y}}&z={{z}}', {{
             maxZoom: 20,
             subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
@@ -125,7 +144,102 @@ html_code = f"""
             maxZoom: 20
         }});
 
-        // Cửa sổ xem phố Google Street View trực tiếp
+        // --- CẤU HÌNH TÍNH NĂNG GPS REALTIME ---
+        var userMarker = null;
+        var userAccuracyCircle = null;
+        var watchId = null;
+        var isTracking = false;
+
+        // Tạo nút điều khiển GPS trên góc bản đồ
+        var gpsControl = L.control({{position: 'topleft'}});
+        gpsControl.onAdd = function(map) {{
+            var div = L.DomUtil.create('div', 'gps-button');
+            div.innerHTML = '🎯';
+            div.title = 'Bật/Tắt Định vị GPS Realtime';
+            
+            L.DomEvent.disableClickPropagation(div);
+            div.onclick = function() {{
+                if (!isTracking) {{
+                    startGPS(div);
+                }} else {{
+                    stopGPS(div);
+                }}
+            }};
+            return div;
+        }};
+        gpsControl.addTo(map);
+
+        function startGPS(btnElement) {{
+            if (!navigator.geolocation) {{
+                alert("Thiết bị hoặc trình duyệt của bạn không hỗ trợ định vị GPS.");
+                return;
+            }}
+
+            btnElement.classList.add('gps-active');
+            isTracking = true;
+
+            // Đăng ký theo dõi vị trí GPS thời gian thực (WatchPosition)
+            watchId = navigator.geolocation.watchPosition(
+                function(position) {{
+                    var lat = position.coords.latitude;
+                    var lng = position.coords.longitude;
+                    var accuracy = position.coords.accuracy;
+
+                    // Nếu đã có marker vị trí cũ thì cập nhật tọa độ
+                    if (userMarker) {{
+                        userMarker.setLatLng([lat, lng]);
+                        userAccuracyCircle.setLatLng([lat, lng]);
+                        userAccuracyCircle.setRadius(accuracy);
+                    }} else {{
+                        // Tạo marker GPS mới (chấm đỏ tâm trắng phát sáng)
+                        userMarker = L.circleMarker([lat, lng], {{
+                            radius: 8,
+                            color: '#ffffff',
+                            weight: 3,
+                            fillColor: '#0078ff',
+                            fillOpacity: 1
+                        }}).addTo(map).bindPopup("<b>📍 Vị trí hiện tại của bạn</b><br>Độ chính xác: ±" + Math.round(accuracy) + "m");
+
+                        userAccuracyCircle = L.circle([lat, lng], {{
+                            radius: accuracy,
+                            color: '#1a73e8',
+                            weight: 1,
+                            fillColor: '#1a73e8',
+                            fillOpacity: 0.15
+                        }}).addTo(map);
+
+                        // Di chuyển tâm bản đồ đến vị trí hiện tại khi bật GPS lần đầu
+                        map.setView([lat, lng], 16);
+                    }}
+                }},
+                function(error) {{
+                    alert("Không thể lấy vị trí GPS: " + error.message + ". Vui lòng bật Quyền vị trí trên điện thoại.");
+                    stopGPS(btnElement);
+                }},
+                {{
+                    enableHighAccuracy: true, // Ưu tiên độ chính xác cao bằng chip GPS
+                    maximumAge: 0,
+                    timeout: 10000
+                }}
+            );
+        }}
+
+        function stopGPS(btnElement) {{
+            if (watchId !== null) {{
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }}
+            if (userMarker) {{
+                map.removeLayer(userMarker);
+                map.removeLayer(userAccuracyCircle);
+                userMarker = null;
+                userAccuracyCircle = null;
+            }}
+            btnElement.classList.remove('gps-active');
+            isTracking = false;
+        }}
+
+        // --- CÁC LỚP BẢN ĐỒ KML & STREET VIEW ---
         function getInlineStreetView(lat, lng, title) {{
             var iframeUrl = "https://maps.google.com/maps?q=&layer=c&cbll=" + lat + "," + lng + "&cbp=12,0,0,0,0&panoid=&ie=UTF8&output=svembed";
             return "<div style='font-family: sans-serif;'>" +
@@ -135,7 +249,6 @@ html_code = f"""
                    "</div>";
         }}
 
-        // Click bất kỳ vị trí nào để xem Street View
         map.on('click', function(e) {{
             var lat = e.latlng.lat;
             var lng = e.latlng.lng;
@@ -145,13 +258,13 @@ html_code = f"""
                 .openOn(map);
         }});
 
-        // 1. Vẽ Đường dây (Nét đỏ)
+        // 1. Đường dây
         var linesData = {json.dumps(day_lines)};
         linesData.forEach(function(path) {{
             L.polyline(path, {{color: '#ff3333', weight: 3, opacity: 0.9}}).addTo(map);
         }});
 
-        // 2. Gom nhóm & Vẽ tất cả Cột điện (Chấm xanh)
+        // 2. Cột điện (Cluster)
         var cotData = {json.dumps(cot_pts)};
         var cotMarkers = L.markerClusterGroup({{
             chunkedLoading: true,
@@ -169,7 +282,7 @@ html_code = f"""
         }});
         map.addLayer(cotMarkers);
 
-        // 3. Vẽ Trạm biến áp (Chấm cam)
+        // 3. Trạm biến áp
         var tramData = {json.dumps(tram_pts)};
         tramData.forEach(function(pt) {{
             L.circleMarker(pt, {{
@@ -181,7 +294,7 @@ html_code = f"""
             }}).bindPopup(getInlineStreetView(pt[0], pt[1], "🏭 Trạm biến áp"), {{maxWidth: 340}}).addTo(map);
         }});
 
-        // Bảng chọn lớp bản đồ
+        // Bảng điều khiển lớp
         var baseMaps = {{
             "Vệ tinh Google": googleHybrid,
             "Giao thông Google": googleRoads
